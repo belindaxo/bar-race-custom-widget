@@ -167,9 +167,9 @@ import * as Highcharts from 'highcharts';
                 return [output[0], output.slice(1, nbr)];
             }
 
-            function getSubtitle() {
-                const population = (getData(input.value)[0][1] / 1000000000).toFixed(2);
-                return `<span style="font-size: 80px">${input.value}</span>
+            function getSubtitle(year) {
+                const population = (getData(year)[0][1] / 1000000000).toFixed(2);
+                return `<span style="font-size: 80px">${year}</span>
         <br>
         <span style="font-size: 22px">
             Total: <b>: ${population}</b> billion
@@ -192,7 +192,7 @@ import * as Highcharts from 'highcharts';
                     align: 'left'
                 },
                 subtitle: {
-                    text: getSubtitle(),
+                    text: getSubtitle(startYear),
                     floating: true,
                     align: 'right',
                     verticalAlign: 'middle',
@@ -298,10 +298,12 @@ import * as Highcharts from 'highcharts';
                     pause(btn);
                 }
 
+                const year = parseInt(input.value, 10);
+
                 chart.update(
                     {
                         subtitle: {
-                            text: getSubtitle()
+                            text: getSubtitle(year)
                         }
                     },
                     false,
@@ -310,8 +312,8 @@ import * as Highcharts from 'highcharts';
                 );
 
                 chart.series[0].update({
-                    name: input.value,
-                    data: getData(input.value)[1]
+                    name: year,
+                    data: getData(year)[1]
                 });
             }
 
