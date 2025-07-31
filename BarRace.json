@@ -1,0 +1,27 @@
+{
+    "name": "Bar Race",
+    "description": "A Bar Race with data binding support",
+    "eula": "",
+    "vendor": "",
+    "license": "",
+    "id": "com.sap.sample.bar.race",
+    "newInstancePrefix": "BarRace",
+    "version": "1.0.0",
+    "webcomponents": [
+        {
+            "kind": "main",
+            "tag": "com-sap-sample-bar-race",
+            "url": "https://belindaxo.github.io/bar-race-custom-widget/dist/bundle.js",
+            "integrity": "sha256-",
+            "ignoreIntegrity": true
+        }
+    ],
+    "properties": {
+    },
+    "methods": {
+
+    },
+    "events": {
+
+    }
+}
