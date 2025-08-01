@@ -66,7 +66,7 @@ import * as Highcharts from 'highcharts';
                 input = this.shadowRoot.getElementById('play-range'),
                 nbr = 20;
 
-            let dataset, chart;
+            let dataset;
 
             dataset = await fetch(
                 'https://demo-live-data.highcharts.com/population.json'
@@ -273,8 +273,12 @@ import * as Highcharts from 'highcharts';
                     }]
                 }
             };
+
+            // if (this._chart) {
+            //     this._chart.destroy();
+            // }
             this._chart = Highcharts.chart(this.shadowRoot.getElementById('container'), chartOptions);
-            chart = Highcharts.chart(this.shadowRoot.getElementById('container'), chartOptions);
+            const chart = this._chart;
 
             /*
              * Pause the timeline, either when the range is ended, or when clicking the
