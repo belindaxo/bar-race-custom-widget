@@ -1,4 +1,5 @@
 import * as Highcharts from 'highcharts';
+import { parseMetadata } from './data/metadataParser';
 
 (function () {
     class BarRace extends HTMLElement {
@@ -60,19 +61,65 @@ import * as Highcharts from 'highcharts';
         }
 
         async _renderChart() {
-            const startYear = 1960,
-                endYear = 2022,
-                btn = this.shadowRoot.getElementById('play-pause-button'),
-                input = this.shadowRoot.getElementById('play-range'),
-                nbr = 20;
+            const dataBinding = this.dataBinding;
+            if (!dataBinding || dataBinding.state !== 'success') {
+                if (this._chart) {
+                    this._chart.destroy();
+                    this._chart = null;
+                }
+                return;
+            }
+            console.log('dataBinding: ', dataBinding);
 
-            let dataset;
+            const { data, metadata } = dataBinding;
+            const { dimensions, measures } = parseMetadata(metadata);
 
-            dataset = await fetch(
-                'https://demo-live-data.highcharts.com/population.json'
-            ).then(response => response.json());
-            
-            
+            const categoryDimension = dimensions[0];
+            const timeDimension = dimensions[1];
+            const measure = measures[0];
+
+            let dataset = {};
+            dataBinding.data.forEach(row => {
+                const category = row[categoryDimension.key]?.label || 'No Label';
+                const date = row[timeDimension.key]?.label || 'No Date';
+                const value = row[measure.key]?.raw ?? 0;
+
+                if (!dataset[category]) {
+                    dataset[category] = {};
+                }
+                dataset[category][date] = value;
+            })
+
+            const nbr = 20;
+            // Get all time values in the order they appear
+            const allPeriods = [...new Set(
+                dataBinding.data.map(row => row[timeDimension].label)
+            )];
+
+            const startPeriod = allPeriods[0];
+            const endPeriod = allPeriods[allPeriods.length - 1];
+            const input = this.shadowRoot.getElementById('play-range');
+            input.min = 0;
+            input.max = allPeriods.length - 1;
+            input.value = 0;
+
+
+            // const startYear = 1960,
+            //     endYear = 2022,
+            //     btn = this.shadowRoot.getElementById('play-pause-button'),
+            //     input = this.shadowRoot.getElementById('play-range'), 
+            //     nbr = 20;
+
+
+
+
+
+
+            // dataset = await fetch(
+            //     'https://demo-live-data.highcharts.com/population.json'
+            // ).then(response => response.json());
+
+
             /*
              * Animate dataLabels functionality
              */
@@ -162,21 +209,20 @@ import * as Highcharts from 'highcharts';
             }(Highcharts));
 
 
-            function getData(year) {
+            function getData(period) {
                 const output = Object.entries(dataset)
-                    .map(country => {
-                        const [countryName, countryData] = country;
-                        return [countryName, Number(countryData[year])];
+                    .map(([category, timeData]) => {
+                        return [category, Number(timeData[period] ?? 0)];
                     })
                     .sort((a, b) => b[1] - a[1]);
                 console.log('output: ', output);
                 return [output[0], output.slice(1, nbr)];
             }
 
-            function getSubtitle(year) {
-                const population = (getData(year)[0][1] / 1000000000).toFixed(2);
+            function getSubtitle(period) {
+                const population = (getData(period)[0][1] / 1000000000).toFixed(2);
                 return `
-                    <span style="font-size: 80px">${year}</span>
+                    <span style="font-size: 80px">${period}</span>
                     <br>
                     <span style="font-size: 22px">
                     Total: <b>: ${population}</b> billion
@@ -238,8 +284,8 @@ import * as Highcharts from 'highcharts';
                 series: [
                     {
                         type: 'bar',
-                        name: startYear,
-                        data: getData(startYear)[1]
+                        name: startPeriod,
+                        data: getData(startPeriod)[1]
                     }
                 ],
                 responsive: {
@@ -298,17 +344,17 @@ import * as Highcharts from 'highcharts';
                 if (increment) {
                     input.value = parseInt(input.value, 10) + increment;
                 }
-                if (input.value >= endYear) {
+                if (input.value >= allPeriods.length - 1) {
                     // Auto-pause
                     pause(btn);
                 }
 
-                const year = parseInt(input.value, 10);
+                const currentPeriod = allPeriods[Number(input.value)];
 
                 chart.update(
                     {
                         subtitle: {
-                            text: getSubtitle(year)
+                            text: getSubtitle(currentPeriod)
                         }
                     },
                     false,
@@ -317,8 +363,8 @@ import * as Highcharts from 'highcharts';
                 );
 
                 chart.series[0].update({
-                    name: year,
-                    data: getData(year)[1]
+                    name: currentPeriod,
+                    data: getData(currentPeriod)[1]
                 });
             }
 
