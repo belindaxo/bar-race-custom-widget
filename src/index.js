@@ -111,11 +111,11 @@ import * as Highcharts from 'highcharts';
                     this.elem.attr(this.prop, currentValue, null, true);
                 };
 
-                // // Add textGetter, not supported at all at this moment:
-                // H.SVGElement.prototype.textGetter = function () {
-                //     const ct = this.text.element.textContent || '';
-                //     return this.endText ? this.endText : ct.substring(0, ct.length / 2);
-                // };
+                // Add textGetter, not supported at all at this moment:
+                H.SVGElement.prototype.textGetter = function () {
+                    const ct = this.text.element.textContent || '';
+                    return this.endText ? this.endText : ct.substring(0, ct.length / 2);
+                };
 
                 // Temporary change label.attr() with label.animate():
                 // In core it's simple change attr(...) => animate(...) for text prop
@@ -174,11 +174,13 @@ import * as Highcharts from 'highcharts';
 
             function getSubtitle(year) {
                 const population = (getData(year)[0][1] / 1000000000).toFixed(2);
-                return `<span style="font-size: 80px">${year}</span>
-        <br>
-        <span style="font-size: 22px">
-            Total: <b>: ${population}</b> billion
-        </span>`;
+                return `
+                    <span style="font-size: 80px">${year}</span>
+                    <br>
+                    <span style="font-size: 22px">
+                    Total: <b>: ${population}</b> billion
+                    </span>
+                `;
             }
 
             const chartOptions = {
