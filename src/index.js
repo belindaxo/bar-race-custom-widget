@@ -169,6 +169,7 @@ import * as Highcharts from 'highcharts';
                         return [countryName, Number(countryData[year])];
                     })
                     .sort((a, b) => b[1] - a[1]);
+                console.log('output: ', output);
                 return [output[0], output.slice(1, nbr)];
             }
 
@@ -274,9 +275,6 @@ import * as Highcharts from 'highcharts';
                 }
             };
 
-            // if (this._chart) {
-            //     this._chart.destroy();
-            // }
             this._chart = Highcharts.chart(this.shadowRoot.getElementById('container'), chartOptions);
             const chart = this._chart;
 
