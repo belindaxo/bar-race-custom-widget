@@ -231,7 +231,8 @@ import * as Highcharts from 'highcharts';
                         },
                         type: 'bar',
                         dataLabels: {
-                            enabled: true
+                            enabled: true,
+                            allowOverlap: true
                         }
                     }
                 },
