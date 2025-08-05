@@ -1,5 +1,4 @@
 import * as Highcharts from 'highcharts';
-import { parseMetadata } from './data/metadataParser';
 
 (function () {
     class BarRace extends HTMLElement {
@@ -61,65 +60,19 @@ import { parseMetadata } from './data/metadataParser';
         }
 
         async _renderChart() {
-            const dataBinding = this.dataBinding;
-            if (!dataBinding || dataBinding.state !== 'success') {
-                if (this._chart) {
-                    this._chart.destroy();
-                    this._chart = null;
-                }
-                return;
-            }
-            console.log('dataBinding: ', dataBinding);
+            const startYear = 1960,
+                endYear = 2022,
+                btn = this.shadowRoot.getElementById('play-pause-button'),
+                input = this.shadowRoot.getElementById('play-range'),
+                nbr = 20;
 
-            const { data, metadata } = dataBinding;
-            const { dimensions, measures } = parseMetadata(metadata);
+            let dataset;
 
-            const categoryDimension = dimensions[0];
-            const timeDimension = dimensions[1];
-            const measure = measures[0];
-
-            let dataset = {};
-            dataBinding.data.forEach(row => {
-                const category = row[categoryDimension.key]?.label || 'No Label';
-                const date = row[timeDimension.key]?.label || 'No Date';
-                const value = row[measure.key]?.raw ?? 0;
-
-                if (!dataset[category]) {
-                    dataset[category] = {};
-                }
-                dataset[category][date] = value;
-            })
-
-            const nbr = 20;
-            // Get all time values in the order they appear
-            const allPeriods = [...new Set(
-                dataBinding.data.map(row => row[timeDimension].label)
-            )];
-
-            const startPeriod = allPeriods[0];
-            const endPeriod = allPeriods[allPeriods.length - 1];
-            const input = this.shadowRoot.getElementById('play-range');
-            input.min = 0;
-            input.max = allPeriods.length - 1;
-            input.value = 0;
-
-
-            // const startYear = 1960,
-            //     endYear = 2022,
-            //     btn = this.shadowRoot.getElementById('play-pause-button'),
-            //     input = this.shadowRoot.getElementById('play-range'), 
-            //     nbr = 20;
-
-
-
-
-
-
-            // dataset = await fetch(
-            //     'https://demo-live-data.highcharts.com/population.json'
-            // ).then(response => response.json());
-
-
+            dataset = await fetch(
+                'https://demo-live-data.highcharts.com/population.json'
+            ).then(response => response.json());
+            
+            
             /*
              * Animate dataLabels functionality
              */
@@ -209,20 +162,21 @@ import { parseMetadata } from './data/metadataParser';
             }(Highcharts));
 
 
-            function getData(period) {
+            function getData(year) {
                 const output = Object.entries(dataset)
-                    .map(([category, timeData]) => {
-                        return [category, Number(timeData[period] ?? 0)];
+                    .map(country => {
+                        const [countryName, countryData] = country;
+                        return [countryName, Number(countryData[year])];
                     })
                     .sort((a, b) => b[1] - a[1]);
                 console.log('output: ', output);
                 return [output[0], output.slice(1, nbr)];
             }
 
-            function getSubtitle(period) {
-                const population = (getData(period)[0][1] / 1000000000).toFixed(2);
+            function getSubtitle(year) {
+                const population = (getData(year)[0][1] / 1000000000).toFixed(2);
                 return `
-                    <span style="font-size: 80px">${period}</span>
+                    <span style="font-size: 80px">${year}</span>
                     <br>
                     <span style="font-size: 22px">
                     Total: <b>: ${population}</b> billion
@@ -284,8 +238,8 @@ import { parseMetadata } from './data/metadataParser';
                 series: [
                     {
                         type: 'bar',
-                        name: startPeriod,
-                        data: getData(startPeriod)[1]
+                        name: startYear,
+                        data: getData(startYear)[1]
                     }
                 ],
                 responsive: {
@@ -344,17 +298,17 @@ import { parseMetadata } from './data/metadataParser';
                 if (increment) {
                     input.value = parseInt(input.value, 10) + increment;
                 }
-                if (input.value >= allPeriods.length - 1) {
+                if (input.value >= endYear) {
                     // Auto-pause
                     pause(btn);
                 }
 
-                const currentPeriod = allPeriods[Number(input.value)];
+                const year = parseInt(input.value, 10);
 
                 chart.update(
                     {
                         subtitle: {
-                            text: getSubtitle(currentPeriod)
+                            text: getSubtitle(year)
                         }
                     },
                     false,
@@ -363,8 +317,8 @@ import { parseMetadata } from './data/metadataParser';
                 );
 
                 chart.series[0].update({
-                    name: currentPeriod,
-                    data: getData(currentPeriod)[1]
+                    name: year,
+                    data: getData(year)[1]
                 });
             }
 
