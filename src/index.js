@@ -164,18 +164,19 @@ import * as Highcharts from 'highcharts';
 
             function getData(year) {
                 const output = Object.entries(dataset)
-                    .map(country => {
-                        const [countryName, countryData] = country;
-                        return [countryName, Number(countryData[year])];
+                    .map(([countryName, countryData]) => {
+                        const val = Number(countryData?.[year]);
+                        return [countryName, isNaN(val) ? 0 : val];
                     })
                     .sort((a, b) => b[1] - a[1]);
+
                 if (output.length === 0) {
                     return [['No data', 0], []];
                 }
-                console.log('output: ', output);
-                console.log('return value of getData(year): ', [output[0], output.slice(1, nbr)]);
+
                 return [output[0], output.slice(1, nbr)];
             }
+
 
             function getSubtitle(year) {
                 const topEntry = getData(year)[0];
