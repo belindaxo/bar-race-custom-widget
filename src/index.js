@@ -40,10 +40,10 @@ import * as Highcharts from 'highcharts';
          * Called when the widget is destroyed. Cleans up chart instance.
          */
         onCustomWidgetDestroy() {
-            // if (this._chart) {
-            //     this._chart.destroy();
-            //     this._chart = null;
-            // }
+            if (this._chart) {
+                this._chart.destroy();
+                this._chart = null;
+            }
         }
 
         /**
@@ -71,8 +71,8 @@ import * as Highcharts from 'highcharts';
             dataset = await fetch(
                 'https://demo-live-data.highcharts.com/population.json'
             ).then(response => response.json());
-            
-            
+
+
             /*
              * Animate dataLabels functionality
              */
@@ -169,20 +169,31 @@ import * as Highcharts from 'highcharts';
                         return [countryName, Number(countryData[year])];
                     })
                     .sort((a, b) => b[1] - a[1]);
+                if (output.length === 0) {
+                    return [['No data', 0], []];
+                }
                 console.log('output: ', output);
+                console.log('return value of getData(year): ', [output[0], output.slice(1, nbr)]);
                 return [output[0], output.slice(1, nbr)];
             }
 
             function getSubtitle(year) {
-                const population = (getData(year)[0][1] / 1000000000).toFixed(2);
+                const topEntry = getData(year)[0];
+
+                let population = '0.00';
+                if (topEntry && typeof topEntry[1] === 'number' && !isNaN(topEntry[1])) {
+                    population = (topEntry[1] / 1000000000).toFixed(2);
+                }
+
                 return `
                     <span style="font-size: 80px">${year}</span>
                     <br>
                     <span style="font-size: 22px">
-                    Total: <b>: ${population}</b> billion
+                    Total: <b>${population}</b> billion
                     </span>
                 `;
             }
+
 
             const chartOptions = {
                 chart: {
