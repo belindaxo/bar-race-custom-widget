@@ -13,8 +13,7 @@ import { processSeriesData } from './data/dataProcessor';
                     <div id="play-controls">
                         <button id="play-pause-button" title="play" style="margin-left: 10px; width: 45px; height: 45px; cursor: pointer; border: 1px solid #004b8d;
                         border-radius: 25px; color: white; background-color: #004b8d; transition: background-color 250ms; font-size: 18px;">▶</button>
-                        <input id="play-range" type="range" value="1960" min="1960" max="2022" style="transform: translateY(2.5px); width: calc(100% - 90px);  
-                        background: #f8f8f8;"/>
+                        <input id="play-range" type="range" style="transform: translateY(2.5px); width: calc(100% - 90px); background: #f8f8f8;"/>
                     </div>
                     <div id="container"></div>
                 </div>
@@ -76,17 +75,28 @@ import { processSeriesData } from './data/dataProcessor';
             const structuredData = processSeriesData(data, dimensions, measures);
             console.log('structuredData:', structuredData);
 
-            const startYear = 1960,
-                endYear = 2022,
-                btn = this.shadowRoot.getElementById('play-pause-button'),
-                input = this.shadowRoot.getElementById('play-range'),
-                nbr = 20;
+            const years = Object.keys(structuredData);
+            console.log('years: ', years);
+            const startYear = years[0];
+            console.log('startYear: ', startYear);
+            const endYear = years[years.length - 1];
+            console.log('endYear: ', endYear);
+            const nbr = 10;
 
-            let dataset;
+            this._currentYear = startYear;
+            console.log('this._currentYear: ', this._currentYear);
 
-            dataset = await fetch(
-                'https://demo-live-data.highcharts.com/population.json'
-            ).then(response => response.json());
+            const input = this.shadowRoot.getElementById('play-range');
+            input.min = startYear;
+            input.max = endYear;
+            input.value = startYear;
+
+
+            // let dataset;
+
+            // dataset = await fetch(
+            //     'https://demo-live-data.highcharts.com/population.json'
+            // ).then(response => response.json());
 
 
             /*
@@ -179,23 +189,25 @@ import { processSeriesData } from './data/dataProcessor';
 
 
             function getData(year) {
-                const output = Object.entries(dataset)
-                    .map(country => {
-                        const [countryName, countryData] = country;
-                        return [countryName, Number(countryData[year])];
-                    })
+                const timeData = structuredData?.[year] || {};
+                const entries = Object.entries(timeData)
+                    .map(([category, value]) => [category, Number(value)])
                     .sort((a, b) => b[1] - a[1]);
-                console.log('output: ', output);
-                return [output[0], output.slice(1, nbr)];
+                console.log('entries: ', entries);
+                console.log('output for getData: ', [entries[0], entries.slice(1, nbr)]);
+                return [entries[0], entries.slice(1, nbr)];
             }
 
             function getSubtitle(year) {
-                const population = (getData(year)[0][1] / 1000000000).toFixed(2);
+                const topEntry = getData.call(this, year)[0];
+                console.log('topEntry: ', topEntry);
+                const amount = topEntry ? (topEntry[1] / 1000000000).toFixed(2) : 0;
+                console.log('amount: ', amount);
                 return `
                     <span style="font-size: 80px">${year}</span>
                     <br>
                     <span style="font-size: 22px">
-                    Total: <b>: ${population}</b> billion
+                    Total: <b>: ${amount}</b> billion
                     </span>
                 `;
             }
@@ -254,8 +266,8 @@ import { processSeriesData } from './data/dataProcessor';
                 series: [
                     {
                         type: 'bar',
-                        name: startYear,
-                        data: getData(startYear)[1]
+                        name: this._currentYear,
+                        data: getData.call(this, this._currentYear)[1],
                     }
                 ],
                 responsive: {
