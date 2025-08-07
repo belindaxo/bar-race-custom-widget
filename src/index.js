@@ -224,8 +224,8 @@ import { processSeriesData } from './data/dataProcessor';
                     align: 'right',
                     verticalAlign: 'middle',
                     useHTML: true,
-                    y: 50,
-                    x: -100
+                    y: 100,
+                    x: -20
                 },
                 credits: {
                     enabled: false
