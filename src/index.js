@@ -1,4 +1,6 @@
 import * as Highcharts from 'highcharts';
+import { parseMetadata } from './data/metadataParser';
+import { processSeriesData } from './data/dataProcessor';
 
 (function () {
     class BarRace extends HTMLElement {
@@ -60,6 +62,20 @@ import * as Highcharts from 'highcharts';
         }
 
         async _renderChart() {
+            const dataBinding = this.dataBinding;
+            if (!dataBinding || dataBinding.state !== 'success' || !dataBinding.data || dataBinding.data.length === 0) {
+                if (this._chart) {
+                    this._chart.destroy();
+                    this._chart = null;
+                }
+                return;
+            }
+            console.log('dataBinding:', dataBinding);
+            const { data, metadata } = dataBinding;
+            const { dimensions, measures } = parseMetadata(metadata);
+            const structuredData = processSeriesData(data, dimensions, measures);
+            console.log('structuredData:', structuredData);
+
             const startYear = 1960,
                 endYear = 2022,
                 btn = this.shadowRoot.getElementById('play-pause-button'),
