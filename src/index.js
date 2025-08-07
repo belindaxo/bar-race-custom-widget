@@ -202,7 +202,7 @@ import { processSeriesData } from './data/dataProcessor';
             function getSubtitle(year) {
                 const topEntry = getData.call(this, year)[0];
                 console.log('topEntry: ', topEntry);
-                const amount = Object.values(structuredData[year] || {}).reduce((sum, value) => sum + Number(value), 0);
+                const amount = Number(Object.values(structuredData[year] || {}).reduce((sum, value) => sum + Number(value), 0)).toFixed(2);
                 console.log('amount: ', amount);
                 return `
                     <span style="font-size: 80px">${year}</span>
