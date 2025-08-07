@@ -91,6 +91,7 @@ import { processSeriesData } from './data/dataProcessor';
             input.max = endYear;
             input.value = startYear;
 
+            const btn = this.shadowRoot.getElementById('play-pause-button');
 
             // let dataset;
 
