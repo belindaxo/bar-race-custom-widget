@@ -93,13 +93,6 @@ import { processSeriesData } from './data/dataProcessor';
 
             const btn = this.shadowRoot.getElementById('play-pause-button');
 
-            // let dataset;
-
-            // dataset = await fetch(
-            //     'https://demo-live-data.highcharts.com/population.json'
-            // ).then(response => response.json());
-
-
             /*
              * Animate dataLabels functionality
              */
@@ -222,7 +215,7 @@ import { processSeriesData } from './data/dataProcessor';
                     marginRight: 50
                 },
                 title: {
-                    text: 'World population by country',
+                    text: 'Chart Title',
                     align: 'left'
                 },
                 subtitle: {
@@ -234,7 +227,9 @@ import { processSeriesData } from './data/dataProcessor';
                     y: 50,
                     x: -100
                 },
-
+                credits: {
+                    enabled: false
+                },
                 legend: {
                     enabled: false
                 },
