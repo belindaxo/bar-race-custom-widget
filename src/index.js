@@ -1,12 +1,16 @@
 import * as Highcharts from 'highcharts';
 import { parseMetadata } from './data/metadataParser';
 import { processSeriesData } from './data/dataProcessor';
+import { applyHighchartsDefaults } from './config/highchartsSetup';
+import { createChartStylesheet } from './config/styles';
 
 (function () {
     class BarRace extends HTMLElement {
         constructor() {
             super();
             this.attachShadow({ mode: 'open' });
+
+            this.shadowRoot.adoptedStyleSheets = [createChartStylesheet()];
 
             this.shadowRoot.innerHTML = `
                 <div id="parent-container">
@@ -206,6 +210,8 @@ import { processSeriesData } from './data/dataProcessor';
                     </span>
                 `;
             }
+
+            applyHighchartsDefaults();
 
             const chartOptions = {
                 chart: {
