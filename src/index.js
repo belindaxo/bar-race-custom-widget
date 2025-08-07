@@ -125,23 +125,33 @@ import * as Highcharts from 'highcharts';
 
                     if (chart.sequenceTimer) {
                         this.points.forEach(point =>
-                            (point.dataLabels || []).forEach(label => {
-                                label.attr = function (hash) {
-                                    if (hash && hash.text !== undefined && chart.isResizing === 0) {
+                            (point.dataLabels || []).forEach(
+                                label =>
+                                (label.attr = function (hash) {
+                                    if (
+                                        hash &&
+                                        hash.text !== undefined &&
+                                        chart.isResizing === 0
+                                    ) {
                                         const text = hash.text;
+
                                         delete hash.text;
 
-                                        // Avoid infinite recursion by using original attr
-                                        attr.call(this, hash);
-                                        return this.animate({ text });
+                                        return this
+                                            .attr(hash)
+                                            .animate({ text });
                                     }
                                     return attr.apply(this, arguments);
-                                };
-                            })
+
+                                })
+                            )
                         );
                     }
 
-                    const ret = proceed.apply(this, Array.prototype.slice.call(arguments, 1));
+                    const ret = proceed.apply(
+                        this,
+                        Array.prototype.slice.call(arguments, 1)
+                    );
 
                     this.points.forEach(p =>
                         (p.dataLabels || []).forEach(d => (d.attr = attr))
@@ -149,43 +159,30 @@ import * as Highcharts from 'highcharts';
 
                     return ret;
                 });
-
             }(Highcharts));
 
 
             function getData(year) {
                 const output = Object.entries(dataset)
-                    .map(([countryName, countryData]) => {
-                        const val = Number(countryData?.[year]);
-                        return [countryName, isNaN(val) ? 0 : val];
+                    .map(country => {
+                        const [countryName, countryData] = country;
+                        return [countryName, Number(countryData[year])];
                     })
                     .sort((a, b) => b[1] - a[1]);
-
-                if (output.length === 0) {
-                    return [['No data', 0], []];
-                }
-
+                console.log('output: ', output);
                 return [output[0], output.slice(1, nbr)];
             }
 
-
             function getSubtitle(year) {
-                const topEntry = getData(year)[0];
-
-                let population = '0.00';
-                if (topEntry && typeof topEntry[1] === 'number' && !isNaN(topEntry[1])) {
-                    population = (topEntry[1] / 1000000000).toFixed(2);
-                }
-
+                const population = (getData(year)[0][1] / 1000000000).toFixed(2);
                 return `
                     <span style="font-size: 80px">${year}</span>
                     <br>
                     <span style="font-size: 22px">
-                    Total: <b>${population}</b> billion
+                    Total: <b>: ${population}</b> billion
                     </span>
                 `;
             }
-
 
             const chartOptions = {
                 chart: {
@@ -234,8 +231,7 @@ import * as Highcharts from 'highcharts';
                         },
                         type: 'bar',
                         dataLabels: {
-                            enabled: true,
-                            allowOverlap: true
+                            enabled: true
                         }
                     }
                 },
@@ -315,8 +311,8 @@ import * as Highcharts from 'highcharts';
                             text: getSubtitle(year)
                         }
                     },
-                    true,
-                    true,
+                    false,
+                    false,
                     false
                 );
 
