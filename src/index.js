@@ -76,8 +76,17 @@ import { createChartStylesheet } from './config/styles';
             console.log('dataBinding:', dataBinding);
             const { data, metadata } = dataBinding;
             const { dimensions, measures } = parseMetadata(metadata);
+            if (dimensions.length < 2 || measures.length < 1) {
+                if (this._chart) {
+                    this._chart.destroy();
+                    this._chart = null;
+                }
+                return;
+            }
+
             const structuredData = processSeriesData(data, dimensions, measures);
             console.log('structuredData:', structuredData);
+            
 
             const years = Object.keys(structuredData);
             console.log('years: ', years);
