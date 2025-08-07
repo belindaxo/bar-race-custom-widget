@@ -125,33 +125,23 @@ import * as Highcharts from 'highcharts';
 
                     if (chart.sequenceTimer) {
                         this.points.forEach(point =>
-                            (point.dataLabels || []).forEach(
-                                label =>
-                                (label.attr = function (hash) {
-                                    if (
-                                        hash &&
-                                        hash.text !== undefined &&
-                                        chart.isResizing === 0
-                                    ) {
+                            (point.dataLabels || []).forEach(label => {
+                                label.attr = function (hash) {
+                                    if (hash && hash.text !== undefined && chart.isResizing === 0) {
                                         const text = hash.text;
-
                                         delete hash.text;
 
-                                        return this
-                                            .attr(hash)
-                                            .animate({ text });
+                                        // Avoid infinite recursion by using original attr
+                                        attr.call(this, hash);
+                                        return this.animate({ text });
                                     }
                                     return attr.apply(this, arguments);
-
-                                })
-                            )
+                                };
+                            })
                         );
                     }
 
-                    const ret = proceed.apply(
-                        this,
-                        Array.prototype.slice.call(arguments, 1)
-                    );
+                    const ret = proceed.apply(this, Array.prototype.slice.call(arguments, 1));
 
                     this.points.forEach(p =>
                         (p.dataLabels || []).forEach(d => (d.attr = attr))
@@ -159,6 +149,7 @@ import * as Highcharts from 'highcharts';
 
                     return ret;
                 });
+
             }(Highcharts));
 
 
