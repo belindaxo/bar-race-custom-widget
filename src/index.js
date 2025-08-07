@@ -196,19 +196,19 @@ import { processSeriesData } from './data/dataProcessor';
                     .sort((a, b) => b[1] - a[1]);
                 console.log('entries: ', entries);
                 console.log('output for getData: ', [entries[0], entries.slice(1, nbr)]);
-                return [entries[0], entries.slice(1, nbr)];
+                return [entries[0], entries.slice(0, nbr)];
             }
 
             function getSubtitle(year) {
                 const topEntry = getData.call(this, year)[0];
                 console.log('topEntry: ', topEntry);
-                const amount = topEntry ? (topEntry[1] / 1000000000).toFixed(2) : 0;
+                const amount = topEntry ? topEntry[1].toFixed(2) : 0;
                 console.log('amount: ', amount);
                 return `
                     <span style="font-size: 80px">${year}</span>
                     <br>
                     <span style="font-size: 22px">
-                    Total: <b>: ${amount}</b> billion
+                    Total: <b>${amount}</b>
                     </span>
                 `;
             }
