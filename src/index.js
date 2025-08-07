@@ -64,7 +64,7 @@ import { createChartStylesheet } from './config/styles';
             }
         }
 
-        async _renderChart() {
+        _renderChart() {
             const dataBinding = this.dataBinding;
             if (!dataBinding || dataBinding.state !== 'success' || !dataBinding.data || dataBinding.data.length === 0) {
                 if (this._chart) {
