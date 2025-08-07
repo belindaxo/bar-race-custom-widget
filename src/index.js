@@ -40,10 +40,10 @@ import * as Highcharts from 'highcharts';
          * Called when the widget is destroyed. Cleans up chart instance.
          */
         onCustomWidgetDestroy() {
-            if (this._chart) {
-                this._chart.destroy();
-                this._chart = null;
-            }
+            // if (this._chart) {
+            //     this._chart.destroy();
+            //     this._chart = null;
+            // }
         }
 
         /**
@@ -312,8 +312,8 @@ import * as Highcharts from 'highcharts';
                             text: getSubtitle(year)
                         }
                     },
-                    false,
-                    false,
+                    true,
+                    true,
                     false
                 );
 
