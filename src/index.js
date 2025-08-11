@@ -4,6 +4,67 @@ import { processSeriesData } from './data/dataProcessor';
 import { applyHighchartsDefaults } from './config/highchartsSetup';
 import { createChartStylesheet } from './config/styles';
 
+// Install the data label text animation shim
+if (!Highcharts._barRaceLabelShimInstalled) {
+    (function (H) {
+        const FLOAT = /^-?\d+\.?\d*$/;
+
+        H.Fx.prototype.textSetter = function () {
+            const chart = H.charts[this.elem.renderer.chartIndex];
+
+            let thousandsSep = chart.numberFormatter('1000.0')[1];
+            if (/[0-9]/.test(thousandsSep)) {
+                thousandsSep = ' ';
+            }
+            const replaceRegEx = new RegExp(thousandsSep, 'g');
+
+            let startValue = (this.start ?? '').toString().replace(replaceRegEx, '');
+            let endValue = (this.end ?? '').toString().replace(replaceRegEx, '');
+            let currentValue = endValue;
+
+            if (FLOAT.test(startValue) && FLOAT.test(endValue)) {
+                const s = parseFloat(startValue);
+                const e = parseFloat(endValue);
+                currentValue = chart.numberFormatter(Math.round(s + (e - s) * this.pos), 0);
+            }
+            this.elem.endText = this.end;
+            this.elem.attr(this.prop, currentValue, null, true);
+        };
+
+        H.SVGElement.prototype.textGetter = function () {
+            const ct = this.text.element.textContent || '';
+            return this.endText ? this.endText : ct.substring(0, Math.floor(ct.length / 2));
+        };
+
+        H.wrap(H.Series.prototype, 'drawDataLabels', function (proceed) {
+            const attr = H.SVGElement.prototype.attr;
+            const chart = this.chart;
+
+            if (chart.sequenceTimer) {
+                this.points.forEach(point =>
+                    (point.dataLabels || []).forEach(label => {
+                        label.attr = function (hash) {
+                            if (hash && hash.text !== undefined && chart.isResizing === 0) {
+                                const text = hash.text;
+                                delete hash.text;
+                                return this.attr(hash).animate({ text });
+                            }
+                            return attr.apply(this, arguments);
+                        };
+                    })
+                );
+            }
+
+            const ret = proceed.apply(this, Array.prototype.slice.call(arguments, 1));
+
+            this.points.forEach(p => (p.dataLabels || []).forEach(d => (d.attr = attr)));
+            return ret;
+        });
+    })(Highcharts);
+
+    Highcharts._barRaceLabelShimInstalled = true;
+}
+
 (function () {
     class BarRace extends HTMLElement {
         constructor() {
@@ -22,6 +83,16 @@ import { createChartStylesheet } from './config/styles';
                     <div id="container"></div>
                 </div>
             `;
+
+            // internal state
+            this._chart = null;
+            this._currentYear = undefined;
+            this._renderTimer = null;
+
+            // bound handlers
+            this._onPlayPause = null;
+            this._onSliderInput = null;
+            this._onSliderDown = null;
         }
 
         /**
@@ -30,7 +101,7 @@ import { createChartStylesheet } from './config/styles';
          * @param {number} height - New height of the widget.
          */
         onCustomWidgetResize(width, height) {
-            this._renderChart();
+            this._scheduleRender();
         }
 
         /**
@@ -38,17 +109,35 @@ import { createChartStylesheet } from './config/styles';
          * @param {Object} changedProperties - Object containing changed attributes.
          */
         onCustomWidgetAfterUpdate(changedProperties) {
-            this._renderChart();
+            this._scheduleRender();
         }
 
         /**
          * Called when the widget is destroyed. Cleans up chart instance.
          */
         onCustomWidgetDestroy() {
+            if (this._chart && this._chart.sequenceTimer) {
+                clearInterval(this._chart.sequenceTimer);
+                this._chart.sequenceTimer = undefined;
+            }
+
+            // detach listeners
+            const btn = this.shadowRoot.getElementById('play-pause-button');
+            const input = this.shadowRoot.getElementById('play-range');
+            if (btn && this._onPlayPause) btn.removeEventListener('click', this._onPlayPause);
+            if (input && this._onSliderInput) input.removeEventListener('input', this._onSliderInput);
+            if (input && this._onSliderDown) input.removeEventListener('pointerdown', this._onSliderDown);
+
+            // destroy chart instance
             if (this._chart) {
                 this._chart.destroy();
                 this._chart = null;
             }
+        }
+
+        _scheduleRender() {
+            clearTimeout(this._renderTimer);
+            this._renderTimer = setTimeout(() => this._renderChart(), 0);
         }
 
         /**
@@ -60,157 +149,85 @@ import { createChartStylesheet } from './config/styles';
         attributeChangedCallback(name, oldValue, newValue) {
             if (oldValue !== newValue) {
                 this[name] = newValue;
-                this._renderChart();
+                this._scheduleRender();
             }
         }
 
         _renderChart() {
             const dataBinding = this.dataBinding;
             if (!dataBinding || dataBinding.state !== 'success' || !dataBinding.data || dataBinding.data.length === 0) {
-                if (this._chart) {
-                    this._chart.destroy();
-                    this._chart = null;
-                }
+                this._teardownChart();
                 return;
             }
             console.log('dataBinding:', dataBinding);
             const { data, metadata } = dataBinding;
             const { dimensions, measures } = parseMetadata(metadata);
             if (dimensions.length < 2 || measures.length < 1) {
-                if (this._chart) {
-                    this._chart.destroy();
-                    this._chart = null;
-                }
+                this._teardownChart();
                 return;
             }
 
             const structuredData = processSeriesData(data, dimensions, measures);
             console.log('structuredData:', structuredData);
-            
 
-            const years = Object.keys(structuredData);
-            console.log('years: ', years);
+
+            // Build a sorted list of years (numeric if possible)
+            const labelKeys = Object.keys(structuredData);
+            let years;
+            const numericYears = labelKeys.map(k => Number(k));
+            if (numericYears.every(Number.isFinite)) {
+                years = numericYears.sort((a, b) => a - b);
+            } else {
+                // fallback: keep insertion order
+                years = labelKeys;
+            }
+
+            if (!years.length) {
+                this._teardownChart();
+                return;
+            }
+
             const startYear = years[0];
             console.log('startYear: ', startYear);
             const endYear = years[years.length - 1];
             console.log('endYear: ', endYear);
             const nbr = 10;
 
-            this._currentYear = startYear;
-            console.log('this._currentYear: ', this._currentYear);
-
-            const input = this.shadowRoot.getElementById('play-range');
-            input.min = startYear;
-            input.max = endYear;
-            input.value = startYear;
-
+            const container = this.shadowRoot.getElementById('container');
             const btn = this.shadowRoot.getElementById('play-pause-button');
+            const input = this.shadowRoot.getElementById('play-range');
 
-            /*
-             * Animate dataLabels functionality
-             */
-            (function (H) {
-                const FLOAT = /^-?\d+\.?\d*$/;
+            // configure slider bounds/step once
+            const minStr = String(startYear);
+            const maxStr = String(endYear);
+            if (input.min !== minStr) input.min = minStr;
+            if (input.max !== maxStr) input.max = maxStr;
+            input.step = '1';
 
-                // Add animated textSetter, just like fill/strokeSetters
-                H.Fx.prototype.textSetter = function () {
-                    const chart = H.charts[this.elem.renderer.chartIndex];
-
-                    let thousandsSep = chart.numberFormatter('1000.0')[1];
-
-                    if (/[0-9]/.test(thousandsSep)) {
-                        thousandsSep = ' ';
-                    }
-
-                    const replaceRegEx = new RegExp(thousandsSep, 'g');
-
-                    let startValue = this.start.replace(replaceRegEx, ''),
-                        endValue = this.end.replace(replaceRegEx, ''),
-                        currentValue = this.end.replace(replaceRegEx, '');
-
-                    if ((startValue || '').match(FLOAT)) {
-                        startValue = parseInt(startValue, 10);
-                        endValue = parseInt(endValue, 10);
-
-                        // No support for float
-                        currentValue = chart.numberFormatter(
-                            Math.round(startValue + (endValue - startValue) * this.pos),
-                            0
-                        );
-                    }
-
-                    this.elem.endText = this.end;
-
-                    this.elem.attr(this.prop, currentValue, null, true);
-                };
-
-                // Add textGetter, not supported at all at this moment:
-                H.SVGElement.prototype.textGetter = function () {
-                    const ct = this.text.element.textContent || '';
-                    return this.endText ? this.endText : ct.substring(0, ct.length / 2);
-                };
-
-                // Temporary change label.attr() with label.animate():
-                // In core it's simple change attr(...) => animate(...) for text prop
-                H.wrap(H.Series.prototype, 'drawDataLabels', function (proceed) {
-                    const attr = H.SVGElement.prototype.attr,
-                        chart = this.chart;
-
-                    if (chart.sequenceTimer) {
-                        this.points.forEach(point =>
-                            (point.dataLabels || []).forEach(
-                                label =>
-                                (label.attr = function (hash) {
-                                    if (
-                                        hash &&
-                                        hash.text !== undefined &&
-                                        chart.isResizing === 0
-                                    ) {
-                                        const text = hash.text;
-
-                                        delete hash.text;
-
-                                        return this
-                                            .attr(hash)
-                                            .animate({ text });
-                                    }
-                                    return attr.apply(this, arguments);
-
-                                })
-                            )
-                        );
-                    }
-
-                    const ret = proceed.apply(
-                        this,
-                        Array.prototype.slice.call(arguments, 1)
-                    );
-
-                    this.points.forEach(p =>
-                        (p.dataLabels || []).forEach(d => (d.attr = attr))
-                    );
-
-                    return ret;
-                });
-            }(Highcharts));
-
-
-            function getData(year) {
-                const timeData = structuredData?.[year] || {};
-                const entries = Object.entries(timeData)
-                    .map(([category, value]) => [category, Number(value)])
-                    .sort((a, b) => b[1] - a[1]);
-                console.log('entries: ', entries);
-                console.log('output for getData: ', [entries[0], entries.slice(1, nbr)]);
-                return [entries[0], entries.slice(0, nbr)];
+            // preserve current year if valid, else set to start year, with clamping
+            const prev = Number(input.value);
+            if (Number.isFinite(prev)) {
+                this._currentYear = Math.max(Number(startYear), Math.min(Number(endYear), prev));
+                input.value = String(this._currentYear);
+            } else {
+                this._currentYear = Number(startYear);
+                input.value = String(startYear);
             }
 
-            function getSubtitle(year) {
-                const topEntry = getData.call(this, year)[0];
-                console.log('topEntry: ', topEntry);
-                const amount = Number(Object.values(structuredData[year] || {}).reduce((sum, value) => sum + Number(value), 0)).toFixed(2);
-                const total = Highcharts.numberFormat(amount, -1, '.', ',');
-                console.log('amount: ', amount);
+
+            const getData = (year) => {
+                const yKey = String(year);
+                const timeData = structuredData?.[yKey] || {};
+                return Object.entries(timeData)
+                    .map(([category, value]) => [category, Number(value) || 0])
+                    .sort((a, b) => b[1] - a[1])
+                    .slice(0, nbr);
+            };
+
+            const getSubtitle = (year) => {
+                const yKey = String(year);
+                const sum = Object.values(structuredData[yKey] || {}).reduce((s, v) => s + (Number(v) || 0), 0);
+                const total = Highcharts.numberFormat(sum, -1, '.', ',');
                 return `
                     <span style="font-size: 80px">${year}</span>
                     <br>
@@ -222,171 +239,175 @@ import { createChartStylesheet } from './config/styles';
 
             applyHighchartsDefaults();
 
-            const chartOptions = {
-                chart: {
-                    animation: {
-                        duration: 500
+            if (!this._chart) {
+                const chartOptions = {
+                    chart: {
+                        animation: {
+                            duration: 500
+                        },
+                        marginRight: 50
                     },
-                    marginRight: 50
-                },
-                title: {
-                    text: 'Chart Title',
-                    align: 'left'
-                },
-                subtitle: {
-                    text: getSubtitle(startYear),
-                    floating: true,
-                    align: 'right',
-                    verticalAlign: 'middle',
-                    useHTML: true,
-                    y: 100,
-                    x: -20
-                },
-                credits: {
-                    enabled: false
-                },
-                legend: {
-                    enabled: false
-                },
-                xAxis: {
-                    type: 'category'
-                },
-                yAxis: {
-                    opposite: true,
-                    tickPixelInterval: 150,
                     title: {
-                        text: null
-                    }
-                },
-                plotOptions: {
-                    series: {
-                        animation: false,
-                        groupPadding: 0,
-                        pointPadding: 0.1,
-                        borderWidth: 0,
-                        colorByPoint: true,
-                        dataSorting: {
-                            enabled: true,
-                            matchByName: true
-                        },
-                        type: 'bar',
-                        dataLabels: {
-                            enabled: true
+                        text: 'Chart Title',
+                        align: 'left'
+                    },
+                    subtitle: {
+                        text: getSubtitle(this._currentYear),
+                        floating: true,
+                        align: 'right',
+                        verticalAlign: 'middle',
+                        useHTML: true,
+                        y: 100,
+                        x: -20
+                    },
+                    credits: {
+                        enabled: false
+                    },
+                    legend: {
+                        enabled: false
+                    },
+                    xAxis: {
+                        type: 'category'
+                    },
+                    yAxis: {
+                        opposite: true,
+                        tickPixelInterval: 150,
+                        title: {
+                            text: null
                         }
-                    }
-                },
-                series: [
-                    {
-                        type: 'bar',
-                        name: this._currentYear,
-                        data: getData.call(this, this._currentYear)[1],
-                    }
-                ],
-                responsive: {
-                    rules: [{
-                        condition: {
-                            maxWidth: 550
-                        },
-                        chartOptions: {
-                            xAxis: {
-                                visible: false
+                    },
+                    plotOptions: {
+                        series: {
+                            animation: false,
+                            groupPadding: 0,
+                            pointPadding: 0.1,
+                            borderWidth: 0,
+                            colorByPoint: true,
+                            dataSorting: {
+                                enabled: true,
+                                matchByName: true
                             },
-                            subtitle: {
-                                x: 0
-                            },
-                            plotOptions: {
-                                series: {
-                                    dataLabels: [{
-                                        enabled: true,
-                                        y: 8
-                                    }, {
-                                        enabled: true,
-                                        format: '{point.name}',
-                                        y: -8,
-                                        style: {
-                                            fontWeight: 'normal',
-                                            opacity: 0.7
-                                        }
-                                    }]
-                                }
+                            type: 'bar',
+                            dataLabels: {
+                                enabled: true
                             }
                         }
-                    }]
-                }
-            };
+                    },
+                    series: [
+                        {
+                            type: 'bar',
+                            name: String(this._currentYear),
+                            data: getData(this._currentYear)
+                        }
+                    ],
+                    responsive: {
+                        rules: [{
+                            condition: {
+                                maxWidth: 550
+                            },
+                            chartOptions: {
+                                xAxis: {
+                                    visible: false
+                                },
+                                subtitle: {
+                                    x: 0
+                                },
+                                plotOptions: {
+                                    series: {
+                                        dataLabels: [{
+                                            enabled: true,
+                                            y: 8
+                                        }, {
+                                            enabled: true,
+                                            format: '{point.name}',
+                                            y: -8,
+                                            style: {
+                                                fontWeight: 'normal',
+                                                opacity: 0.7
+                                            }
+                                        }]
+                                    }
+                                }
+                            }
+                        }]
+                    }
+                };
+                this._chart = Highcharts.chart(this.shadowRoot.getElementById('container'), chartOptions);
+            } else {
+                this._chart.update({ subtitle: { text: getSubtitle(this._currentYear) } }, false, false, false);
+                this._chart.series[0].update({ name: String(this._currentYear), data: getData(this._currentYear) }, true, { duration: 500 });
+            }
 
-            this._chart = Highcharts.chart(this.shadowRoot.getElementById('container'), chartOptions);
             const chart = this._chart;
 
-            /*
-             * Pause the timeline, either when the range is ended, or when clicking the
-             * pause button. Pausing stops the timer and resets the button to play mode.
-             */
-            function pause(button) {
+            const pause = (button) => {
                 button.title = 'play';
                 button.innerText = '▶';
                 button.style.fontSize = '18px';
-                clearTimeout(chart.sequenceTimer);
+                if (chart.sequenceTimer) clearInterval(chart.sequenceTimer);
                 chart.sequenceTimer = undefined;
             }
 
-            /*
-             * Update the chart. This happens either on updating (moving) the range input,
-             * or from a timer when the timeline is playing.
-             */
-            function update(increment) {
+            const doUpdate = (increment) => {
                 if (increment) {
-                    input.value = parseInt(input.value, 10) + increment;
-                }
-                if (input.value >= endYear) {
-                    // Auto-pause
-                    pause(btn);
+                    input.value = String(parseInt(input.value, 10) + increment);
                 }
 
-                const year = parseInt(input.value, 10);
+                let year = parseInt(input.value, 10);
+                if (!Number.isFinite(year)) year = Number(startYear);
+                year = Math.max(Number(startYear), Math.min(Number(endYear), year));
+                input.value = String(year);
 
-                chart.update(
-                    {
-                        subtitle: {
-                            text: getSubtitle(year)
-                        }
-                    },
-                    false,
-                    false,
-                    false
-                );
+                // update subtitle without full redraw
+                chart.update({ subtitle: { text: getSubtitle(year) } }, false, false, false);
 
-                chart.series[0].update({
-                    name: year,
-                    data: getData(year)[1]
-                });
+                // update series
+                chart.series[0].update({ name: String(year), data: getData(year) }, true, { duration: 500 });
+
+                this._currentYear = year;
             }
 
-            /*
-             * Play the timeline.
-             */
-            function play(button) {
+            const play = (button) => {
                 button.title = 'pause';
                 button.innerText = '⏸';
                 button.style.fontSize = '22px';
-                chart.sequenceTimer = setInterval(function () {
-                    update(1);
-                }, 500);
+                if (chart.sequenceTimer) clearInterval(chart.sequenceTimer);
+                chart.sequenceTimer = setInterval(() => doUpdate(1), 500);
+            };
+
+            if (this._onPlayPause) btn.removeEventListener('click', this._onPlayPause);
+            this._onPlayPause = () => {
+                if (chart.sequenceTimer) pause(btn);
+                else play(btn);
+            };
+            btn.addEventListener('click', this._onPlayPause);
+
+            if (this._onSliderInput) input.removeEventListener('input', this._onSliderInput);
+            this._onSliderInput = () => doUpdate(0);
+            input.addEventListener('input', this._onSliderInput);
+
+            if (this._onSliderDown) input.removeEventListener('pointerdown', this._onSliderDown);
+            this._onSliderDown = () => { if (chart.sequenceTimer) pause(btn); };
+            input.addEventListener('pointerdown', this._onSliderDown);
+        }
+
+        _teardownChart() {
+            const btn = this.shadowRoot.getElementById('play-pause-button');
+            const input = this.shadowRoot.getElementById('play-range');
+
+            if (this._chart && this._chart.sequenceTimer) {
+                clearInterval(this._chart.sequenceTimer);
+                this._chart.sequenceTimer = undefined;
             }
 
-            btn.addEventListener('click', function () {
-                if (chart.sequenceTimer) {
-                    pause(this);
-                } else {
-                    play(this);
-                }
-            });
-            /*
-             * Trigger the update on the range bar click.
-             */
-            input.addEventListener('click', function () {
-                update();
-            });
+            if (btn && this._onPlayPause) btn.removeEventListener('click', this._onPlayPause);
+            if (input && this._onSliderInput) input.removeEventListener('input', this._onSliderInput);
+            if (input && this._onSliderDown) input.removeEventListener('pointerdown', this._onSliderDown);
+
+            if (this._chart) {
+                this._chart.destroy();
+                this._chart = null;
+            }
         }
     }
     customElements.define('com-sap-sample-bar-race', BarRace);
