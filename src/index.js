@@ -97,11 +97,17 @@ if (!Highcharts._barRaceLabelShimInstalled) {
             this._onSliderMove = null;
             this._onSliderUp = null;
             this._onSliderCancel = null;
+            this._onMouseDown = null;
+            this._onMouseMove = null;
+            this._onMouseUp = null;
 
             // flags
             this._isDestroying = false;
             this._dragging = false;
 
+            // RAF batching
+            this._raf = 0;
+            this._pendingYear = null;
         }
 
         /**
@@ -147,15 +153,9 @@ if (!Highcharts._barRaceLabelShimInstalled) {
             if (input && this._onSliderMove) input.removeEventListener('pointermove', this._onSliderMove);
             if (input && this._onSliderUp) input.removeEventListener('pointerup', this._onSliderUp);
             if (input && this._onSliderCancel) input.removeEventListener('pointercancel', this._onSliderCancel);
-
-
-            // (defensive) clear series data to reduce destroy work
-            try {
-                if (this._chart) {
-                    this._chart.series?.forEach(s => s.update({ data: [] }, false));
-                    this._chart.redraw(false);
-                }
-            } catch { }
+            if (input && this._onMouseDown) input.removeEventListener('mousedown', this._onMouseDown);
+            if (input && this._onMouseMove) input.removeEventListener('mousemove', this._onMouseMove);
+            if (input && this._onMouseUp) input.removeEventListener('mouseup', this._onMouseUp);
 
             try { this._chart && this._chart.destroy(); } catch { }
             this._chart = null;
@@ -187,7 +187,6 @@ if (!Highcharts._barRaceLabelShimInstalled) {
                 this._teardownChart();
                 return;
             }
-            console.log('dataBinding:', dataBinding);
             const { data, metadata } = dataBinding;
             const { dimensions, measures } = parseMetadata(metadata);
             if (dimensions.length < 2 || measures.length < 1) {
@@ -196,8 +195,6 @@ if (!Highcharts._barRaceLabelShimInstalled) {
             }
 
             const structuredData = processSeriesData(data, dimensions, measures);
-            console.log('structuredData:', structuredData);
-
 
             // Build a sorted list of years (numeric if possible)
             const labelKeys = Object.keys(structuredData);
@@ -216,9 +213,7 @@ if (!Highcharts._barRaceLabelShimInstalled) {
             }
 
             const startYear = years[0];
-            console.log('startYear: ', startYear);
             const endYear = years[years.length - 1];
-            console.log('endYear: ', endYear);
             const nbr = 10;
 
             const btn = this.shadowRoot.getElementById('play-pause-button');
@@ -380,24 +375,36 @@ if (!Highcharts._barRaceLabelShimInstalled) {
                     input.value = String(parseInt(input.value, 10) + increment);
                 }
 
-                let year = parseInt(input.value, 10);
-                if (!Number.isFinite(year)) year = Number(startYear);
-                year = Math.max(Number(startYear), Math.min(Number(endYear), year));
-                input.value = String(year);
+                // compute the clamped year/position once
+                let yr = parseInt(input.value, 10);
+                if (!Number.isFinite(yr)) yr = Number(startYear);
+                yr = Math.max(Number(startYear), Math.min(Number(endYear), yr));
+                input.value = String(yr);
 
-                if (year >= Number(endYear)) {
-                    // stop the interval so it doesn't keep updating the same frame
-                    pause(btn);
-                }
+                // store latest request and schedule exactly one draw per frame
+                this._pendingYear = yr;
+                if (this._raf) return;
 
-                // update subtitle without full redraw
-                chart.update({ subtitle: { text: getSubtitle(year) } }, false, false, false);
+                this._raf = requestAnimationFrame(() => {
+                    this._raf = 0;
+                    const year = this._pendingYear;
+                    this._pendingYear = null;
 
-                // update series
-                chart.series[0].update({ name: String(year), data: getData(year) }, true, { duration: 500 });
+                    if (year >= Number(endYear)) {
+                        // stop the interval so it doesn't keep updating the same frame
+                        pause(btn);
+                    }
 
-                this._currentYear = year;
-            }
+                    // update subtitle without full redraw (series.update will redraw)
+                    chart.update({ subtitle: { text: getSubtitle(year) } }, false, false, false);
+
+                    // update series (dataSorting handles the race animation)
+                    chart.series[0].update({ name: String(year), data: getData(year) }, true, { duration: 500 });
+
+                    this._currentYear = year;
+                });
+            };
+
 
             const play = (button) => {
                 button.title = 'pause';
@@ -445,6 +452,20 @@ if (!Highcharts._barRaceLabelShimInstalled) {
             this._onSliderCancel = () => { this._dragging = false; };
             input.addEventListener('pointercancel', this._onSliderCancel);
 
+            // Mouse fallback (for environments without pointer events on range)
+            if (this._onMouseDown) input.removeEventListener('mousedown', this._onMouseDown);
+            this._onMouseDown = () => { if (chart.sequenceTimer) pause(btn); this._dragging = true; };
+            input.addEventListener('mousedown', this._onMouseDown);
+
+            if (this._onMouseMove) input.removeEventListener('mousemove', this._onMouseMove);
+            this._onMouseMove = () => { if (!this._dragging) return; doUpdate(0); };
+            input.addEventListener('mousemove', this._onMouseMove);
+
+            if (this._onMouseUp) input.removeEventListener('mouseup', this._onMouseUp);
+            this._onMouseUp = () => { this._dragging = false; };
+            input.addEventListener('mouseup', this._onMouseUp);
+
+
             input.style.touchAction = 'none';
         }
 
@@ -468,14 +489,12 @@ if (!Highcharts._barRaceLabelShimInstalled) {
             if (input && this._onSliderMove) input.removeEventListener('pointermove', this._onSliderMove);
             if (input && this._onSliderUp) input.removeEventListener('pointerup', this._onSliderUp);
             if (input && this._onSliderCancel) input.removeEventListener('pointercancel', this._onSliderCancel);
+            if (input && this._onMouseDown) input.removeEventListener('mousedown', this._onMouseDown);
+            if (input && this._onMouseMove) input.removeEventListener('mousemove', this._onMouseMove);
+            if (input && this._onMouseUp) input.removeEventListener('mouseup', this._onMouseUp);
 
-            try {
-                if (this._chart) {
-                    this._chart.series?.forEach(s => s.update({ data: [] }, false));
-                    this._chart.redraw(false);
-                    this._chart.destroy();
-                }
-            } catch { }
+
+            try { if (this._chart) this._chart.destroy(); } catch {}
             this._chart = null;
             this._isDestroying = false; // allow future renders
         }
