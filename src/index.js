@@ -227,7 +227,7 @@ if (!Highcharts._barRaceLabelShimInstalled) {
             const getSubtitle = (year) => {
                 const yKey = String(year);
                 const sum = Object.values(structuredData[yKey] || {}).reduce((s, v) => s + (Number(v) || 0), 0);
-                const total = Highcharts.numberFormat(sum, -1, '.', ',');
+                const total = Highcharts.numberFormat(sum, 0, '.', ',');
                 return `
                     <span style="font-size: 80px">${year}</span>
                     <br>
