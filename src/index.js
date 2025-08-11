@@ -92,7 +92,16 @@ if (!Highcharts._barRaceLabelShimInstalled) {
             // bound handlers
             this._onPlayPause = null;
             this._onSliderInput = null;
+            this._onSliderChange = null;
             this._onSliderDown = null;
+            this._onSliderMove = null;
+            this._onSliderUp = null;
+            this._onSliderCancel = null;
+
+            // flags
+            this._isDestroying = false;
+            this._dragging = false;
+
         }
 
         /**
@@ -116,26 +125,45 @@ if (!Highcharts._barRaceLabelShimInstalled) {
          * Called when the widget is destroyed. Cleans up chart instance.
          */
         onCustomWidgetDestroy() {
+            if (this._isDestroying) return;
+            this._isDestroying = true;
+
+            // pause autoplay first
             if (this._chart && this._chart.sequenceTimer) {
                 clearInterval(this._chart.sequenceTimer);
                 this._chart.sequenceTimer = undefined;
             }
+
+            // stop any running Highcharts animations
+            try { Highcharts.stop && Highcharts.stop(this._chart); } catch { }
 
             // detach listeners
             const btn = this.shadowRoot.getElementById('play-pause-button');
             const input = this.shadowRoot.getElementById('play-range');
             if (btn && this._onPlayPause) btn.removeEventListener('click', this._onPlayPause);
             if (input && this._onSliderInput) input.removeEventListener('input', this._onSliderInput);
+            if (input && this._onSliderChange) input.removeEventListener('change', this._onSliderChange);
             if (input && this._onSliderDown) input.removeEventListener('pointerdown', this._onSliderDown);
+            if (input && this._onSliderMove) input.removeEventListener('pointermove', this._onSliderMove);
+            if (input && this._onSliderUp) input.removeEventListener('pointerup', this._onSliderUp);
+            if (input && this._onSliderCancel) input.removeEventListener('pointercancel', this._onSliderCancel);
 
-            // destroy chart instance
-            if (this._chart) {
-                this._chart.destroy();
-                this._chart = null;
-            }
+
+            // (defensive) clear series data to reduce destroy work
+            try {
+                if (this._chart) {
+                    this._chart.series?.forEach(s => s.update({ data: [] }, false));
+                    this._chart.redraw(false);
+                }
+            } catch { }
+
+            try { this._chart && this._chart.destroy(); } catch { }
+            this._chart = null;
+            this._isDestroying = false; // allow future renders
         }
 
         _scheduleRender() {
+            if (this._dragging) return; // don't re-render while dragging slider
             clearTimeout(this._renderTimer);
             this._renderTimer = setTimeout(() => this._renderChart(), 0);
         }
@@ -193,7 +221,6 @@ if (!Highcharts._barRaceLabelShimInstalled) {
             console.log('endYear: ', endYear);
             const nbr = 10;
 
-            const container = this.shadowRoot.getElementById('container');
             const btn = this.shadowRoot.getElementById('play-pause-button');
             const input = this.shadowRoot.getElementById('play-range');
 
@@ -358,6 +385,11 @@ if (!Highcharts._barRaceLabelShimInstalled) {
                 year = Math.max(Number(startYear), Math.min(Number(endYear), year));
                 input.value = String(year);
 
+                if (year >= Number(endYear)) {
+                    // stop the interval so it doesn't keep updating the same frame
+                    pause(btn);
+                }
+
                 // update subtitle without full redraw
                 chart.update({ subtitle: { text: getSubtitle(year) } }, false, false, false);
 
@@ -386,12 +418,40 @@ if (!Highcharts._barRaceLabelShimInstalled) {
             this._onSliderInput = () => doUpdate(0);
             input.addEventListener('input', this._onSliderInput);
 
+            if (this._onSliderChange) input.removeEventListener('change', this._onSliderChange);
+            this._onSliderChange = () => doUpdate(0);
+            input.addEventListener('change', this._onSliderChange);
+
             if (this._onSliderDown) input.removeEventListener('pointerdown', this._onSliderDown);
-            this._onSliderDown = () => { if (chart.sequenceTimer) pause(btn); };
+            this._onSliderDown = () => {
+                if (chart.sequenceTimer) pause(btn);
+                this._dragging = true;
+            };
             input.addEventListener('pointerdown', this._onSliderDown);
+
+            if (this._onSliderMove) input.removeEventListener('pointermove', this._onSliderMove);
+            this._onSliderMove = () => {
+                if (!this._dragging) return;
+                // let the native slider set value, then update chart
+                doUpdate(0);
+            };
+            input.addEventListener('pointermove', this._onSliderMove);
+
+            if (this._onSliderUp) input.removeEventListener('pointerup', this._onSliderUp);
+            this._onSliderUp = () => { this._dragging = false; };
+            input.addEventListener('pointerup', this._onSliderUp);
+
+            if (this._onSliderCancel) input.removeEventListener('pointercancel', this._onSliderCancel);
+            this._onSliderCancel = () => { this._dragging = false; };
+            input.addEventListener('pointercancel', this._onSliderCancel);
+
+            input.style.touchAction = 'none';
         }
 
         _teardownChart() {
+            if (this._isDestroying) return;
+            this._isDestroying = true;
+
             const btn = this.shadowRoot.getElementById('play-pause-button');
             const input = this.shadowRoot.getElementById('play-range');
 
@@ -399,16 +459,27 @@ if (!Highcharts._barRaceLabelShimInstalled) {
                 clearInterval(this._chart.sequenceTimer);
                 this._chart.sequenceTimer = undefined;
             }
+            try { Highcharts.stop && Highcharts.stop(this._chart); } catch { }
 
             if (btn && this._onPlayPause) btn.removeEventListener('click', this._onPlayPause);
             if (input && this._onSliderInput) input.removeEventListener('input', this._onSliderInput);
+            if (input && this._onSliderChange) input.removeEventListener('change', this._onSliderChange);
             if (input && this._onSliderDown) input.removeEventListener('pointerdown', this._onSliderDown);
+            if (input && this._onSliderMove) input.removeEventListener('pointermove', this._onSliderMove);
+            if (input && this._onSliderUp) input.removeEventListener('pointerup', this._onSliderUp);
+            if (input && this._onSliderCancel) input.removeEventListener('pointercancel', this._onSliderCancel);
 
-            if (this._chart) {
-                this._chart.destroy();
-                this._chart = null;
-            }
+            try {
+                if (this._chart) {
+                    this._chart.series?.forEach(s => s.update({ data: [] }, false));
+                    this._chart.redraw(false);
+                    this._chart.destroy();
+                }
+            } catch { }
+            this._chart = null;
+            this._isDestroying = false; // allow future renders
         }
+
     }
     customElements.define('com-sap-sample-bar-race', BarRace);
 })();
