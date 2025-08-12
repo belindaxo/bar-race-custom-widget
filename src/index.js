@@ -174,9 +174,6 @@ if (!Highcharts._barRaceLabelShimInstalled) {
             this._onMouseDown = null;
             this._onMouseMove = null;
             this._onMouseUp = null;
-            this._onTouchStart = null;
-            this._onTouchMove = null;
-            this._onTouchEnd = null;
 
             // flags
             this._isDestroying = false;
@@ -220,9 +217,6 @@ if (!Highcharts._barRaceLabelShimInstalled) {
             if (input && this._onMouseDown) input.removeEventListener('mousedown', this._onMouseDown);
             if (input && this._onMouseMove) input.removeEventListener('mousemove', this._onMouseMove);
             if (input && this._onMouseUp) input.removeEventListener('mouseup', this._onMouseUp);
-            if (input && this._onTouchStart) input.removeEventListener('touchstart', this._onTouchStart);
-            if (input && this._onTouchMove) input.removeEventListener('touchmove', this._onTouchMove);
-            if (input && this._onTouchEnd) input.removeEventListener('touchend', this._onTouchEnd);
 
             // neutralize hover state before destroy
             try {
@@ -476,18 +470,6 @@ if (!Highcharts._barRaceLabelShimInstalled) {
             this._onMouseUp = () => { this._dragging = false; };
             input.addEventListener('mouseup', this._onMouseUp);
 
-            if (this._onTouchStart) input.removeEventListener('touchstart', this._onTouchStart);
-            this._onTouchStart = () => { if (chart.sequenceTimer) pause(btn); this._dragging = true; };
-            input.addEventListener('touchstart', this._onTouchStart, { passive: true });
-
-            if (this._onTouchMove) input.removeEventListener('touchmove', this._onTouchMove);
-            this._onTouchMove = () => { if (!this._dragging) return; doUpdate(0); };
-            input.addEventListener('touchmove', this._onTouchMove, { passive: true });
-
-            if (this._onTouchEnd) input.removeEventListener('touchend', this._onTouchEnd);
-            this._onTouchEnd = () => { this._dragging = false; };
-            input.addEventListener('touchend', this._onTouchEnd);
-
             input.style.touchAction = 'none';
         }
 
@@ -519,9 +501,6 @@ if (!Highcharts._barRaceLabelShimInstalled) {
             if (input && this._onMouseDown) input.removeEventListener('mousedown', this._onMouseDown);
             if (input && this._onMouseMove) input.removeEventListener('mousemove', this._onMouseMove);
             if (input && this._onMouseUp) input.removeEventListener('mouseup', this._onMouseUp);
-            if (input && this._onTouchStart) input.removeEventListener('touchstart', this._onTouchStart);
-            if (input && this._onTouchMove) input.removeEventListener('touchmove', this._onTouchMove);
-            if (input && this._onTouchEnd) input.removeEventListener('touchend', this._onTouchEnd);
 
             // neutralize hover state then destroy
             try {
