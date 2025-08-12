@@ -157,7 +157,7 @@ if (!Highcharts._barRaceLabelShimInstalled) {
                 }
             } catch { }
 
-            try { this._chart && this._chart.destroy(); } catch { }
+            try { this._chart } catch { }
             this._chart = null;
             this._isDestroying = false; // allow future renders
         }
