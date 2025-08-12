@@ -65,6 +65,39 @@ if (!Highcharts._barRaceLabelShimInstalled) {
     Highcharts._barRaceLabelShimInstalled = true;
 }
 
+// --- SAFETY PATCHES: make Highcharts destroy/erase resilient ---
+
+(function (H) {
+    // 1) Make destroy idempotent for Chart and Series (prevents double-destroy)
+    const wrap = H.wrap;
+
+    // Chart.destroy guard
+    wrap(H.Chart.prototype, 'destroy', function (proceed) {
+        if (this.___destroyed) return;      // already destroyed
+        this.___destroyed = true;
+        try { proceed.apply(this, Array.prototype.slice.call(arguments, 1)); }
+        catch (e) { /* swallow; SAC sometimes re-enters */ }
+    });
+
+    // Series.destroy guard
+    wrap(H.Series.prototype, 'destroy', function (proceed) {
+        if (this.___destroyed) return;      // already destroyed
+        this.___destroyed = true;
+        try { proceed.apply(this, Array.prototype.slice.call(arguments, 1)); }
+        catch (e) { /* swallow */ }
+    });
+
+    // 2) Null-safe erase so internal cleanup never explodes
+    const origErase = H.erase;
+    H.erase = function (arr, item) {
+        if (!arr || typeof arr.length !== 'number') return; // nothing to do
+        // Original erase semantics:
+        const i = H.inArray ? H.inArray(item, arr) : (arr ? arr.indexOf(item) : -1);
+        if (i > -1) arr.splice(i, 1);
+    };
+})(Highcharts);
+
+
 (function () {
     class BarRace extends HTMLElement {
         constructor() {
@@ -141,7 +174,7 @@ if (!Highcharts._barRaceLabelShimInstalled) {
             }
 
             // stop any running Highcharts animations
-            try { Highcharts.stop && Highcharts.stop(this._chart); } catch {}
+            try { Highcharts.stop && Highcharts.stop(this._chart); } catch { }
 
             // detach listeners
             const btn = this.shadowRoot.getElementById('play-pause-button');
@@ -154,12 +187,12 @@ if (!Highcharts._barRaceLabelShimInstalled) {
             if (input && this._onSliderUp) input.removeEventListener('pointerup', this._onSliderUp);
             if (input && this._onSliderCancel) input.removeEventListener('pointercancel', this._onSliderCancel);
             // mouse/touch fallbacks
-            if (input && this._onMouseDown)  input.removeEventListener('mousedown',  this._onMouseDown);
-            if (input && this._onMouseMove)  input.removeEventListener('mousemove',  this._onMouseMove);
-            if (input && this._onMouseUp)    input.removeEventListener('mouseup',    this._onMouseUp);
+            if (input && this._onMouseDown) input.removeEventListener('mousedown', this._onMouseDown);
+            if (input && this._onMouseMove) input.removeEventListener('mousemove', this._onMouseMove);
+            if (input && this._onMouseUp) input.removeEventListener('mouseup', this._onMouseUp);
             if (input && this._onTouchStart) input.removeEventListener('touchstart', this._onTouchStart);
-            if (input && this._onTouchMove)  input.removeEventListener('touchmove',  this._onTouchMove);
-            if (input && this._onTouchEnd)   input.removeEventListener('touchend',   this._onTouchEnd);
+            if (input && this._onTouchMove) input.removeEventListener('touchmove', this._onTouchMove);
+            if (input && this._onTouchEnd) input.removeEventListener('touchend', this._onTouchEnd);
 
             // neutralize hover state before destroy (prevents erase(null, ...) inside HC)
             try {
@@ -168,10 +201,10 @@ if (!Highcharts._barRaceLabelShimInstalled) {
                     this._chart.hoverPoint = null;
                     this._chart.pointer?.reset?.(true);
                 }
-            } catch {}
+            } catch { }
 
             // destroy chart (no pre-clear mutations)
-            try { this._chart && this._chart.destroy(); } catch {}
+            try { this._chart && this._chart.destroy(); } catch { }
             this._chart = null;
             this._isDestroying = false; // allow future renders
         }
@@ -476,7 +509,7 @@ if (!Highcharts._barRaceLabelShimInstalled) {
                 clearInterval(this._chart.sequenceTimer);
                 this._chart.sequenceTimer = undefined;
             }
-            try { Highcharts.stop && Highcharts.stop(this._chart); } catch {}
+            try { Highcharts.stop && Highcharts.stop(this._chart); } catch { }
 
             if (btn && this._onPlayPause) btn.removeEventListener('click', this._onPlayPause);
             if (input && this._onSliderInput) input.removeEventListener('input', this._onSliderInput);
@@ -487,12 +520,12 @@ if (!Highcharts._barRaceLabelShimInstalled) {
             if (input && this._onSliderCancel) input.removeEventListener('pointercancel', this._onSliderCancel);
 
             // mouse/touch fallbacks
-            if (input && this._onMouseDown)  input.removeEventListener('mousedown',  this._onMouseDown);
-            if (input && this._onMouseMove)  input.removeEventListener('mousemove',  this._onMouseMove);
-            if (input && this._onMouseUp)    input.removeEventListener('mouseup',    this._onMouseUp);
+            if (input && this._onMouseDown) input.removeEventListener('mousedown', this._onMouseDown);
+            if (input && this._onMouseMove) input.removeEventListener('mousemove', this._onMouseMove);
+            if (input && this._onMouseUp) input.removeEventListener('mouseup', this._onMouseUp);
             if (input && this._onTouchStart) input.removeEventListener('touchstart', this._onTouchStart);
-            if (input && this._onTouchMove)  input.removeEventListener('touchmove',  this._onTouchMove);
-            if (input && this._onTouchEnd)   input.removeEventListener('touchend',   this._onTouchEnd);
+            if (input && this._onTouchMove) input.removeEventListener('touchmove', this._onTouchMove);
+            if (input && this._onTouchEnd) input.removeEventListener('touchend', this._onTouchEnd);
 
             // neutralize hover state before destroy
             try {
@@ -501,10 +534,10 @@ if (!Highcharts._barRaceLabelShimInstalled) {
                     this._chart.hoverPoint = null;
                     this._chart.pointer?.reset?.(true);
                 }
-            } catch {}
+            } catch { }
 
             // destroy chart (no pre-clear mutations)
-            try { if (this._chart) this._chart.destroy(); } catch {}
+            try { if (this._chart) this._chart.destroy(); } catch { }
             this._chart = null;
             this._isDestroying = false; // allow future renders
         }
