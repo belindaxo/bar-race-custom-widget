@@ -135,7 +135,9 @@ if (!Highcharts._barRaceLabelShimInstalled) {
             }
 
             // stop any running Highcharts animations
-            try { Highcharts.stop && Highcharts.stop(this._chart); } catch { }
+            try { Highcharts.stop && Highcharts.stop(this._chart); } catch {
+                console.log('Error during Highcharts stop: (onCustomWidgetDestroy)');
+            }
 
             // detach listeners
             const btn = this.shadowRoot.getElementById('play-pause-button');
@@ -155,9 +157,13 @@ if (!Highcharts._barRaceLabelShimInstalled) {
                     this._chart.series?.forEach(s => s.update({ data: [] }, false));
                     this._chart.redraw(false);
                 }
-            } catch { }
+            } catch {
+                console.log('Error during chart series update: (onCustomWidgetDestroy)');
+            }
 
-            try { this._chart } catch { }
+            try { this._chart && this._chart.destroy(); } catch {
+                console.log('Error during chart destroy: (onCustomWidgetDestroy)');
+            }
             this._chart = null;
             this._isDestroying = false; // allow future renders
         }
@@ -457,7 +463,9 @@ if (!Highcharts._barRaceLabelShimInstalled) {
                 clearInterval(this._chart.sequenceTimer);
                 this._chart.sequenceTimer = undefined;
             }
-            try { Highcharts.stop && Highcharts.stop(this._chart); } catch { }
+            try { Highcharts.stop && Highcharts.stop(this._chart); } catch {
+                console.log('Error during Highcharts stop: (_teardownChart)');
+            }
 
             if (btn && this._onPlayPause) btn.removeEventListener('click', this._onPlayPause);
             if (input && this._onSliderInput) input.removeEventListener('input', this._onSliderInput);
@@ -470,8 +478,12 @@ if (!Highcharts._barRaceLabelShimInstalled) {
             try {
                 if (this._chart) {
                     this._chart.series?.forEach(s => s.update({ data: [] }, false));
-                    this._chart.redraw(false);                }
-            } catch { }
+                    this._chart.redraw(false);
+                    this._chart.destroy();
+                }
+            } catch {
+                console.log('Error during chart destroy: (_teardownChart)');
+            }
             this._chart = null;
             this._isDestroying = false; // allow future renders
         }
