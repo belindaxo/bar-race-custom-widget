@@ -443,7 +443,6 @@ if (!Highcharts._barRaceLabelShimInstalled) {
 
             if (btn && this._onPlayPause) btn.removeEventListener('click', this._onPlayPause);
             if (input && this._onSliderInput) input.removeEventListener('input', this._onSliderInput);
-            if (input && this._onSliderChange) input.removeEventListener('change', this._onSliderChange);
 
             // neutralize hover state then destroy
             try {
