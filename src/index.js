@@ -470,9 +470,7 @@ if (!Highcharts._barRaceLabelShimInstalled) {
             try {
                 if (this._chart) {
                     this._chart.series?.forEach(s => s.update({ data: [] }, false));
-                    this._chart.redraw(false);
-                    this._chart.destroy();
-                }
+                    this._chart.redraw(false);                }
             } catch { }
             this._chart = null;
             this._isDestroying = false; // allow future renders
