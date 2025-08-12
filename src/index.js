@@ -112,7 +112,6 @@ if (!Highcharts._barRaceLabelShimInstalled) {
             // flags
             this._isDestroying = false;
             this._dragging = false;
-
         }
 
         onCustomWidgetResize() {
@@ -142,7 +141,7 @@ if (!Highcharts._barRaceLabelShimInstalled) {
             }
 
             // stop any running Highcharts animations
-            try { Highcharts.stop && Highcharts.stop(this._chart); } catch { }
+            try { Highcharts.stop && Highcharts.stop(this._chart); } catch {}
 
             // detach listeners
             const btn = this.shadowRoot.getElementById('play-pause-button');
@@ -154,7 +153,6 @@ if (!Highcharts._barRaceLabelShimInstalled) {
             if (input && this._onSliderMove) input.removeEventListener('pointermove', this._onSliderMove);
             if (input && this._onSliderUp) input.removeEventListener('pointerup', this._onSliderUp);
             if (input && this._onSliderCancel) input.removeEventListener('pointercancel', this._onSliderCancel);
-
             // mouse/touch fallbacks
             if (input && this._onMouseDown)  input.removeEventListener('mousedown',  this._onMouseDown);
             if (input && this._onMouseMove)  input.removeEventListener('mousemove',  this._onMouseMove);
@@ -163,8 +161,17 @@ if (!Highcharts._barRaceLabelShimInstalled) {
             if (input && this._onTouchMove)  input.removeEventListener('touchmove',  this._onTouchMove);
             if (input && this._onTouchEnd)   input.removeEventListener('touchend',   this._onTouchEnd);
 
+            // neutralize hover state before destroy (prevents erase(null, ...) inside HC)
+            try {
+                if (this._chart) {
+                    this._chart.hoverPoints = [];
+                    this._chart.hoverPoint = null;
+                    this._chart.pointer?.reset?.(true);
+                }
+            } catch {}
+
             // destroy chart (no pre-clear mutations)
-            try { this._chart && this._chart.destroy(); } catch { }
+            try { this._chart && this._chart.destroy(); } catch {}
             this._chart = null;
             this._isDestroying = false; // allow future renders
         }
@@ -469,7 +476,7 @@ if (!Highcharts._barRaceLabelShimInstalled) {
                 clearInterval(this._chart.sequenceTimer);
                 this._chart.sequenceTimer = undefined;
             }
-            try { Highcharts.stop && Highcharts.stop(this._chart); } catch { }
+            try { Highcharts.stop && Highcharts.stop(this._chart); } catch {}
 
             if (btn && this._onPlayPause) btn.removeEventListener('click', this._onPlayPause);
             if (input && this._onSliderInput) input.removeEventListener('input', this._onSliderInput);
@@ -486,6 +493,15 @@ if (!Highcharts._barRaceLabelShimInstalled) {
             if (input && this._onTouchStart) input.removeEventListener('touchstart', this._onTouchStart);
             if (input && this._onTouchMove)  input.removeEventListener('touchmove',  this._onTouchMove);
             if (input && this._onTouchEnd)   input.removeEventListener('touchend',   this._onTouchEnd);
+
+            // neutralize hover state before destroy
+            try {
+                if (this._chart) {
+                    this._chart.hoverPoints = [];
+                    this._chart.hoverPoint = null;
+                    this._chart.pointer?.reset?.(true);
+                }
+            } catch {}
 
             // destroy chart (no pre-clear mutations)
             try { if (this._chart) this._chart.destroy(); } catch {}
