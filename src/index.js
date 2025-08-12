@@ -22,7 +22,7 @@ if (!Highcharts._barRaceLabelShimInstalled) {
             let endValue = (this.end ?? '').toString().replace(replaceRegEx, '');
             let currentValue = endValue;
 
-            if (/^-?\d+\.?\d*$/.test(startValue) && /^-?\d+\.?\d*$/.test(endValue)) {
+            if (FLOAT.test(startValue) && FLOAT.test(endValue)) {
                 const s = parseFloat(startValue);
                 const e = parseFloat(endValue);
                 currentValue = chart.numberFormatter(Math.round(s + (e - s) * this.pos), 0);
@@ -91,6 +91,50 @@ if (!Highcharts._barRaceLabelShimInstalled) {
 })(Highcharts);
 /* -------------------------------------------------------------------------------------------------- */
 
+/* ----- EXTRA SAFETY PATCHES for HC 12.x: SVG teardown idempotent ----- */
+(function (H) {
+    if (!H || !H.SVGElement) return;
+    const wrap = H.wrap;
+
+    // Make every SVGElement destroy idempotent
+    wrap(H.SVGElement.prototype, 'destroy', function (proceed) {
+        if (this.___destroyed) return;
+        this.___destroyed = true;
+
+        // Best-effort: ensure some renderer collections are arrays so internal erase() won't see null
+        try {
+            const r = this.renderer;
+            if (r) {
+                if (Array.isArray(r.alignedObjects) === false) r.alignedObjects = [];
+                if (Array.isArray(r.gradients) === false) r.gradients = [];
+            }
+            const chart = r && Highcharts.charts ? Highcharts.charts[r.chartIndex] : null;
+            if (chart) {
+                chart.hoverPoints = chart.hoverPoints || [];
+                chart.hoverPoint = chart.hoverPoint || null;
+            }
+        } catch { }
+
+        try { proceed.apply(this, Array.prototype.slice.call(arguments, 1)); }
+        catch (e) { /* swallow second-pass SVG cleanup in SAC */ }
+    });
+
+    // Tooltip/pointer safety
+    if (H.Tooltip && H.Tooltip.prototype) {
+        wrap(H.Tooltip.prototype, 'destroy', function (proceed) {
+            if (this.___destroyed) return;
+            this.___destroyed = true;
+            try { proceed.apply(this, Array.prototype.slice.call(arguments, 1)); } catch { }
+        });
+    }
+    if (H.Pointer && H.Pointer.prototype) {
+        wrap(H.Pointer.prototype, 'reset', function (proceed) {
+            try { proceed.apply(this, Array.prototype.slice.call(arguments, 1)); } catch { }
+        });
+    }
+})(Highcharts);
+/* --------------------------------------------------------------------- */
+
 (function () {
     class BarRace extends HTMLElement {
         constructor() {
@@ -99,15 +143,15 @@ if (!Highcharts._barRaceLabelShimInstalled) {
 
             this.shadowRoot.adoptedStyleSheets = [createChartStylesheet()];
             this.shadowRoot.innerHTML = `
-            <div id="parent-container">
-                <div id="play-controls">
-                    <button id="play-pause-button" title="play" style="margin-left: 10px; width: 45px; height: 45px; cursor: pointer; border: 1px solid #004b8d;
-                    border-radius: 25px; color: white; background-color: #004b8d; transition: background-color 250ms; font-size: 18px;">▶</button>
-                    <input id="play-range" type="range" style="transform: translateY(2.5px); width: calc(100% - 90px); background: #f8f8f8;"/>
-                </div>
-                <div id="container"></div>
-            </div>
-            `;
+        <div id="parent-container">
+          <div id="play-controls">
+            <button id="play-pause-button" title="play" style="margin-left: 10px; width: 45px; height: 45px; cursor: pointer; border: 1px solid #004b8d;
+              border-radius: 25px; color: white; background-color: #004b8d; transition: background-color 250ms; font-size: 18px;">▶</button>
+            <input id="play-range" type="range" style="transform: translateY(2.5px); width: calc(100% - 90px); background: #f8f8f8;"/>
+          </div>
+          <div id="container"></div>
+        </div>
+      `;
 
             // internal state
             this._chart = null;
