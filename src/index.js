@@ -22,7 +22,7 @@ if (!Highcharts._barRaceLabelShimInstalled) {
             let endValue = (this.end ?? '').toString().replace(replaceRegEx, '');
             let currentValue = endValue;
 
-            if (FLOAT.test(startValue) && FLOAT.test(endValue)) {
+            if (/^-?\d+\.?\d*$/.test(startValue) && /^-?\d+\.?\d*$/.test(endValue)) {
                 const s = parseFloat(startValue);
                 const e = parseFloat(endValue);
                 currentValue = chart.numberFormatter(Math.round(s + (e - s) * this.pos), 0);
@@ -56,7 +56,6 @@ if (!Highcharts._barRaceLabelShimInstalled) {
             }
 
             const ret = proceed.apply(this, Array.prototype.slice.call(arguments, 1));
-
             this.points.forEach(p => (p.dataLabels || []).forEach(d => (d.attr = attr)));
             return ret;
         });
@@ -65,38 +64,32 @@ if (!Highcharts._barRaceLabelShimInstalled) {
     Highcharts._barRaceLabelShimInstalled = true;
 }
 
-// --- SAFETY PATCHES: make Highcharts destroy/erase resilient ---
-
+/* ---------- SAFETY PATCHES: HC teardown hardening (idempotent destroy + null-safe erase) ---------- */
 (function (H) {
-    // 1) Make destroy idempotent for Chart and Series (prevents double-destroy)
     const wrap = H.wrap;
 
-    // Chart.destroy guard
-    wrap(H.Chart.prototype, 'destroy', function (proceed) {
-        if (this.___destroyed) return;      // already destroyed
-        this.___destroyed = true;
-        try { proceed.apply(this, Array.prototype.slice.call(arguments, 1)); }
-        catch (e) { /* swallow; SAC sometimes re-enters */ }
-    });
+    // Idempotent destroy for main types
+    if (H.Chart) wrap(H.Chart.prototype, 'destroy', function (proceed) { if (this.___destroyed) return; this.___destroyed = true; try { proceed.apply(this, [].slice.call(arguments, 1)); } catch { } });
+    if (H.Series) wrap(H.Series.prototype, 'destroy', function (proceed) { if (this.___destroyed) return; this.___destroyed = true; try { proceed.apply(this, [].slice.call(arguments, 1)); } catch { } });
+    if (H.Axis) wrap(H.Axis.prototype, 'destroy', function (proceed) { if (this.___destroyed) return; this.___destroyed = true; try { proceed.apply(this, [].slice.call(arguments, 1)); } catch { } });
+    if (H.Point) wrap(H.Point.prototype, 'destroy', function (proceed) { if (this.___destroyed) return; this.___destroyed = true; try { proceed.apply(this, [].slice.call(arguments, 1)); } catch { } });
 
-    // Series.destroy guard
-    wrap(H.Series.prototype, 'destroy', function (proceed) {
-        if (this.___destroyed) return;      // already destroyed
-        this.___destroyed = true;
-        try { proceed.apply(this, Array.prototype.slice.call(arguments, 1)); }
-        catch (e) { /* swallow */ }
-    });
-
-    // 2) Null-safe erase so internal cleanup never explodes
+    // Null-safe erase
     const origErase = H.erase;
     H.erase = function (arr, item) {
-        if (!arr || typeof arr.length !== 'number') return; // nothing to do
-        // Original erase semantics:
-        const i = H.inArray ? H.inArray(item, arr) : (arr ? arr.indexOf(item) : -1);
+        if (!arr || typeof arr.length !== 'number') return;
+        const i = (H.inArray ? H.inArray(item, arr) : arr.indexOf(item));
         if (i > -1) arr.splice(i, 1);
     };
-})(Highcharts);
 
+    // Guard destroyElements to survive races
+    if (H.Chart && H.Chart.prototype && H.Chart.prototype.destroyElements) {
+        wrap(H.Chart.prototype, 'destroyElements', function (proceed) {
+            try { proceed.apply(this, [].slice.call(arguments, 1)); } catch { }
+        });
+    }
+})(Highcharts);
+/* -------------------------------------------------------------------------------------------------- */
 
 (function () {
     class BarRace extends HTMLElement {
@@ -105,16 +98,15 @@ if (!Highcharts._barRaceLabelShimInstalled) {
             this.attachShadow({ mode: 'open' });
 
             this.shadowRoot.adoptedStyleSheets = [createChartStylesheet()];
-
             this.shadowRoot.innerHTML = `
-                <div id="parent-container">
-                    <div id="play-controls">
-                        <button id="play-pause-button" title="play" style="margin-left: 10px; width: 45px; height: 45px; cursor: pointer; border: 1px solid #004b8d;
-                        border-radius: 25px; color: white; background-color: #004b8d; transition: background-color 250ms; font-size: 18px;">▶</button>
-                        <input id="play-range" type="range" style="transform: translateY(2.5px); width: calc(100% - 90px); background: #f8f8f8;"/>
-                    </div>
-                    <div id="container"></div>
+            <div id="parent-container">
+                <div id="play-controls">
+                    <button id="play-pause-button" title="play" style="margin-left: 10px; width: 45px; height: 45px; cursor: pointer; border: 1px solid #004b8d;
+                    border-radius: 25px; color: white; background-color: #004b8d; transition: background-color 250ms; font-size: 18px;">▶</button>
+                    <input id="play-range" type="range" style="transform: translateY(2.5px); width: calc(100% - 90px); background: #f8f8f8;"/>
                 </div>
+                <div id="container"></div>
+            </div>
             `;
 
             // internal state
@@ -126,7 +118,7 @@ if (!Highcharts._barRaceLabelShimInstalled) {
             this._raf = 0;
             this._pendingYear = null;
 
-            // bound handlers
+            // handlers
             this._onPlayPause = null;
             this._onSliderInput = null;
             this._onSliderChange = null;
@@ -150,7 +142,6 @@ if (!Highcharts._barRaceLabelShimInstalled) {
         onCustomWidgetResize() {
             this._scheduleRender();
         }
-
         onCustomWidgetAfterUpdate() {
             this._scheduleRender();
         }
@@ -160,10 +151,7 @@ if (!Highcharts._barRaceLabelShimInstalled) {
             this._isDestroying = true;
 
             // cancel any scheduled rAF update
-            if (this._raf) {
-                cancelAnimationFrame(this._raf);
-                this._raf = 0;
-            }
+            if (this._raf) { cancelAnimationFrame(this._raf); this._raf = 0; }
             this._pendingYear = null;
             this._dragging = false;
 
@@ -173,7 +161,6 @@ if (!Highcharts._barRaceLabelShimInstalled) {
                 this._chart.sequenceTimer = undefined;
             }
 
-            // stop any running Highcharts animations
             try { Highcharts.stop && Highcharts.stop(this._chart); } catch { }
 
             // detach listeners
@@ -186,7 +173,6 @@ if (!Highcharts._barRaceLabelShimInstalled) {
             if (input && this._onSliderMove) input.removeEventListener('pointermove', this._onSliderMove);
             if (input && this._onSliderUp) input.removeEventListener('pointerup', this._onSliderUp);
             if (input && this._onSliderCancel) input.removeEventListener('pointercancel', this._onSliderCancel);
-            // mouse/touch fallbacks
             if (input && this._onMouseDown) input.removeEventListener('mousedown', this._onMouseDown);
             if (input && this._onMouseMove) input.removeEventListener('mousemove', this._onMouseMove);
             if (input && this._onMouseUp) input.removeEventListener('mouseup', this._onMouseUp);
@@ -194,7 +180,7 @@ if (!Highcharts._barRaceLabelShimInstalled) {
             if (input && this._onTouchMove) input.removeEventListener('touchmove', this._onTouchMove);
             if (input && this._onTouchEnd) input.removeEventListener('touchend', this._onTouchEnd);
 
-            // neutralize hover state before destroy (prevents erase(null, ...) inside HC)
+            // neutralize hover state before destroy
             try {
                 if (this._chart) {
                     this._chart.hoverPoints = [];
@@ -203,14 +189,13 @@ if (!Highcharts._barRaceLabelShimInstalled) {
                 }
             } catch { }
 
-            // destroy chart (no pre-clear mutations)
             try { this._chart && this._chart.destroy(); } catch { }
             this._chart = null;
-            this._isDestroying = false; // allow future renders
+            this._isDestroying = false;
         }
 
         _scheduleRender() {
-            if (this._dragging) return; // don't re-render while dragging slider
+            if (this._dragging) return;
             clearTimeout(this._renderTimer);
             this._renderTimer = setTimeout(() => this._renderChart(), 0);
         }
@@ -223,6 +208,9 @@ if (!Highcharts._barRaceLabelShimInstalled) {
         }
 
         _renderChart() {
+            // guard: SAC might call while detaching
+            if (this._isDestroying || !this.isConnected) return;
+
             const dataBinding = this.dataBinding;
             if (!dataBinding || dataBinding.state !== 'success' || !dataBinding.data || dataBinding.data.length === 0) {
                 this._teardownChart();
@@ -239,17 +227,14 @@ if (!Highcharts._barRaceLabelShimInstalled) {
             const structuredData = processSeriesData(data, dimensions, measures);
             console.log('structuredData:', structuredData);
 
-            // Build a sorted list of years (numeric if possible)
             const labelKeys = Object.keys(structuredData);
             let years;
             const numericYears = labelKeys.map(k => Number(k));
             if (numericYears.every(Number.isFinite)) {
                 years = numericYears.sort((a, b) => a - b);
             } else {
-                // fallback: keep insertion order
                 years = labelKeys;
             }
-
             if (!years.length) {
                 this._teardownChart();
                 return;
@@ -263,15 +248,17 @@ if (!Highcharts._barRaceLabelShimInstalled) {
 
             const btn = this.shadowRoot.getElementById('play-pause-button');
             const input = this.shadowRoot.getElementById('play-range');
+            const containerEl = this.shadowRoot.getElementById('container');
+            if (!containerEl) return; // container detached
 
-            // configure slider bounds/step once
+            // slider bounds
             const minStr = String(startYear);
             const maxStr = String(endYear);
             if (input.min !== minStr) input.min = minStr;
             if (input.max !== maxStr) input.max = maxStr;
             input.step = '1';
 
-            // preserve current year if valid, else set to start year, with clamping
+            // current year with clamping
             const prev = Number(input.value);
             if (Number.isFinite(prev)) {
                 this._currentYear = Math.max(Number(startYear), Math.min(Number(endYear), prev));
@@ -295,57 +282,39 @@ if (!Highcharts._barRaceLabelShimInstalled) {
                 const sum = Object.values(structuredData[yKey] || {}).reduce((s, v) => s + (Number(v) || 0), 0);
                 const total = Highcharts.numberFormat(sum, 0, '.', ',');
                 return `
-                    <span style="font-size: 80px">${year}</span>
-                    <br>
-                    <span style="font-size: 22px">
-                    Total: <b>${total}</b>
-                    </span>
-                `;
-            }
+          <span style="font-size: 80px">${year}</span>
+          <br>
+          <span style="font-size: 22px">
+          Total: <b>${total}</b>
+          </span>
+        `;
+            };
 
             applyHighchartsDefaults();
 
             if (!this._chart) {
                 const chartOptions = {
-                    chart: {
-                        animation: { duration: 500 },
-                        marginRight: 50
-                    },
+                    chart: { animation: { duration: 500 }, marginRight: 50 },
                     title: { text: 'Chart Title', align: 'left' },
                     subtitle: {
                         text: getSubtitle(this._currentYear),
-                        floating: true,
-                        align: 'right',
-                        verticalAlign: 'middle',
-                        useHTML: true,
-                        y: 100,
-                        x: -20
+                        floating: true, align: 'right', verticalAlign: 'middle',
+                        useHTML: true, y: 100, x: -20
                     },
                     credits: { enabled: false },
                     legend: { enabled: false },
                     xAxis: { type: 'category' },
-                    yAxis: {
-                        opposite: true,
-                        tickPixelInterval: 150,
-                        title: { text: null }
-                    },
+                    yAxis: { opposite: true, tickPixelInterval: 150, title: { text: null } },
                     plotOptions: {
                         series: {
-                            animation: false,
-                            groupPadding: 0,
-                            pointPadding: 0.1,
-                            borderWidth: 0,
+                            animation: false, groupPadding: 0, pointPadding: 0.1, borderWidth: 0,
                             colorByPoint: true,
                             dataSorting: { enabled: true, matchByName: true },
                             type: 'bar',
                             dataLabels: { enabled: true }
                         }
                     },
-                    series: [{
-                        type: 'bar',
-                        name: String(this._currentYear),
-                        data: getData(this._currentYear)
-                    }],
+                    series: [{ type: 'bar', name: String(this._currentYear), data: getData(this._currentYear) }],
                     responsive: {
                         rules: [{
                             condition: { maxWidth: 550 },
@@ -354,19 +323,17 @@ if (!Highcharts._barRaceLabelShimInstalled) {
                                 subtitle: { x: 0 },
                                 plotOptions: {
                                     series: {
-                                        dataLabels: [{
-                                            enabled: true, y: 8
-                                        }, {
-                                            enabled: true, format: '{point.name}', y: -8,
-                                            style: { fontWeight: 'normal', opacity: 0.7 }
-                                        }]
+                                        dataLabels: [
+                                            { enabled: true, y: 8 },
+                                            { enabled: true, format: '{point.name}', y: -8, style: { fontWeight: 'normal', opacity: 0.7 } }
+                                        ]
                                     }
                                 }
                             }
                         }]
                     }
                 };
-                this._chart = Highcharts.chart(this.shadowRoot.getElementById('container'), chartOptions);
+                this._chart = Highcharts.chart(containerEl, chartOptions);
             } else {
                 this._chart.update({ subtitle: { text: getSubtitle(this._currentYear) } }, false, false, false);
                 this._chart.series[0].update({ name: String(this._currentYear), data: getData(this._currentYear) }, true, { duration: 500 });
@@ -380,9 +347,9 @@ if (!Highcharts._barRaceLabelShimInstalled) {
                 button.style.fontSize = '18px';
                 if (chart.sequenceTimer) clearInterval(chart.sequenceTimer);
                 chart.sequenceTimer = undefined;
-            }
+            };
 
-            // RAF-batched updates for smoother drag in SAC edit mode
+            // RAF-batched updates
             const doUpdate = (increment) => {
                 if (increment) {
                     input.value = String(parseInt(input.value, 10) + increment);
@@ -393,7 +360,6 @@ if (!Highcharts._barRaceLabelShimInstalled) {
                 yr = Math.max(Number(startYear), Math.min(Number(endYear), yr));
                 input.value = String(yr);
 
-                // store latest request and schedule one draw per frame
                 this._pendingYear = yr;
                 if (this._raf) return;
 
@@ -402,7 +368,6 @@ if (!Highcharts._barRaceLabelShimInstalled) {
                     const year = this._pendingYear;
                     this._pendingYear = null;
 
-                    // if teardown started or chart vanished, bail
                     if (this._isDestroying || !this._chart) return;
                     const chartNow = this._chart;
 
@@ -415,7 +380,7 @@ if (!Highcharts._barRaceLabelShimInstalled) {
 
                     this._currentYear = year;
                 });
-            }
+            };
 
             const play = (button) => {
                 button.title = 'pause';
@@ -425,11 +390,9 @@ if (!Highcharts._barRaceLabelShimInstalled) {
                 chart.sequenceTimer = setInterval(() => doUpdate(1), 500);
             };
 
+            // (re)bind listeners
             if (this._onPlayPause) btn.removeEventListener('click', this._onPlayPause);
-            this._onPlayPause = () => {
-                if (chart.sequenceTimer) pause(btn);
-                else play(btn);
-            };
+            this._onPlayPause = () => { if (chart.sequenceTimer) pause(btn); else play(btn); };
             btn.addEventListener('click', this._onPlayPause);
 
             if (this._onSliderInput) input.removeEventListener('input', this._onSliderInput);
@@ -441,17 +404,11 @@ if (!Highcharts._barRaceLabelShimInstalled) {
             input.addEventListener('change', this._onSliderChange);
 
             if (this._onSliderDown) input.removeEventListener('pointerdown', this._onSliderDown);
-            this._onSliderDown = () => {
-                if (chart.sequenceTimer) pause(btn);
-                this._dragging = true;
-            };
+            this._onSliderDown = () => { if (chart.sequenceTimer) pause(btn); this._dragging = true; };
             input.addEventListener('pointerdown', this._onSliderDown);
 
             if (this._onSliderMove) input.removeEventListener('pointermove', this._onSliderMove);
-            this._onSliderMove = () => {
-                if (!this._dragging) return;
-                doUpdate(0);
-            };
+            this._onSliderMove = () => { if (!this._dragging) return; doUpdate(0); };
             input.addEventListener('pointermove', this._onSliderMove);
 
             if (this._onSliderUp) input.removeEventListener('pointerup', this._onSliderUp);
@@ -462,7 +419,7 @@ if (!Highcharts._barRaceLabelShimInstalled) {
             this._onSliderCancel = () => { this._dragging = false; };
             input.addEventListener('pointercancel', this._onSliderCancel);
 
-            // Mouse/touch fallbacks for environments without pointer events on range
+            // Mouse/touch fallbacks
             if (this._onMouseDown) input.removeEventListener('mousedown', this._onMouseDown);
             this._onMouseDown = () => { if (chart.sequenceTimer) pause(btn); this._dragging = true; };
             input.addEventListener('mousedown', this._onMouseDown);
@@ -494,11 +451,8 @@ if (!Highcharts._barRaceLabelShimInstalled) {
             if (this._isDestroying) return;
             this._isDestroying = true;
 
-            // cancel any scheduled rAF update
-            if (this._raf) {
-                cancelAnimationFrame(this._raf);
-                this._raf = 0;
-            }
+            // cancel rAF and reset state
+            if (this._raf) { cancelAnimationFrame(this._raf); this._raf = 0; }
             this._pendingYear = null;
             this._dragging = false;
 
@@ -518,8 +472,6 @@ if (!Highcharts._barRaceLabelShimInstalled) {
             if (input && this._onSliderMove) input.removeEventListener('pointermove', this._onSliderMove);
             if (input && this._onSliderUp) input.removeEventListener('pointerup', this._onSliderUp);
             if (input && this._onSliderCancel) input.removeEventListener('pointercancel', this._onSliderCancel);
-
-            // mouse/touch fallbacks
             if (input && this._onMouseDown) input.removeEventListener('mousedown', this._onMouseDown);
             if (input && this._onMouseMove) input.removeEventListener('mousemove', this._onMouseMove);
             if (input && this._onMouseUp) input.removeEventListener('mouseup', this._onMouseUp);
@@ -527,7 +479,7 @@ if (!Highcharts._barRaceLabelShimInstalled) {
             if (input && this._onTouchMove) input.removeEventListener('touchmove', this._onTouchMove);
             if (input && this._onTouchEnd) input.removeEventListener('touchend', this._onTouchEnd);
 
-            // neutralize hover state before destroy
+            // neutralize hover state then destroy
             try {
                 if (this._chart) {
                     this._chart.hoverPoints = [];
@@ -536,12 +488,11 @@ if (!Highcharts._barRaceLabelShimInstalled) {
                 }
             } catch { }
 
-            // destroy chart (no pre-clear mutations)
             try { if (this._chart) this._chart.destroy(); } catch { }
             this._chart = null;
-            this._isDestroying = false; // allow future renders
+            this._isDestroying = false;
         }
-
     }
+
     customElements.define('com-sap-sample-bar-race', BarRace);
 })();
