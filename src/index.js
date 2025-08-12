@@ -170,10 +170,6 @@ if (!Highcharts._barRaceLabelShimInstalled) {
             this._onSliderMove = null;
             this._onSliderUp = null;
             this._onSliderCancel = null;
-            // mouse/touch fallbacks
-            this._onMouseDown = null;
-            this._onMouseMove = null;
-            this._onMouseUp = null;
 
             // flags
             this._isDestroying = false;
@@ -214,9 +210,6 @@ if (!Highcharts._barRaceLabelShimInstalled) {
             if (input && this._onSliderMove) input.removeEventListener('pointermove', this._onSliderMove);
             if (input && this._onSliderUp) input.removeEventListener('pointerup', this._onSliderUp);
             if (input && this._onSliderCancel) input.removeEventListener('pointercancel', this._onSliderCancel);
-            if (input && this._onMouseDown) input.removeEventListener('mousedown', this._onMouseDown);
-            if (input && this._onMouseMove) input.removeEventListener('mousemove', this._onMouseMove);
-            if (input && this._onMouseUp) input.removeEventListener('mouseup', this._onMouseUp);
 
             // neutralize hover state before destroy
             try {
@@ -457,19 +450,6 @@ if (!Highcharts._barRaceLabelShimInstalled) {
             this._onSliderCancel = () => { this._dragging = false; };
             input.addEventListener('pointercancel', this._onSliderCancel);
 
-            // Mouse/touch fallbacks
-            if (this._onMouseDown) input.removeEventListener('mousedown', this._onMouseDown);
-            this._onMouseDown = () => { if (chart.sequenceTimer) pause(btn); this._dragging = true; };
-            input.addEventListener('mousedown', this._onMouseDown);
-
-            if (this._onMouseMove) input.removeEventListener('mousemove', this._onMouseMove);
-            this._onMouseMove = () => { if (!this._dragging) return; doUpdate(0); };
-            input.addEventListener('mousemove', this._onMouseMove);
-
-            if (this._onMouseUp) input.removeEventListener('mouseup', this._onMouseUp);
-            this._onMouseUp = () => { this._dragging = false; };
-            input.addEventListener('mouseup', this._onMouseUp);
-
             input.style.touchAction = 'none';
         }
 
@@ -498,9 +478,6 @@ if (!Highcharts._barRaceLabelShimInstalled) {
             if (input && this._onSliderMove) input.removeEventListener('pointermove', this._onSliderMove);
             if (input && this._onSliderUp) input.removeEventListener('pointerup', this._onSliderUp);
             if (input && this._onSliderCancel) input.removeEventListener('pointercancel', this._onSliderCancel);
-            if (input && this._onMouseDown) input.removeEventListener('mousedown', this._onMouseDown);
-            if (input && this._onMouseMove) input.removeEventListener('mousemove', this._onMouseMove);
-            if (input && this._onMouseUp) input.removeEventListener('mouseup', this._onMouseUp);
 
             // neutralize hover state then destroy
             try {
