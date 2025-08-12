@@ -150,17 +150,6 @@ if (!Highcharts._barRaceLabelShimInstalled) {
             if (input && this._onSliderUp) input.removeEventListener('pointerup', this._onSliderUp);
             if (input && this._onSliderCancel) input.removeEventListener('pointercancel', this._onSliderCancel);
 
-
-            // (defensive) clear series data to reduce destroy work
-            try {
-                if (this._chart) {
-                    this._chart.series?.forEach(s => s.update({ data: [] }, false));
-                    this._chart.redraw(false);
-                }
-            } catch {
-                console.log('Error during chart series update: (onCustomWidgetDestroy)');
-            }
-
             try { this._chart && this._chart.destroy(); } catch {
                 console.log('Error during chart destroy: (onCustomWidgetDestroy)');
             }
