@@ -370,7 +370,16 @@ if (!Highcharts._barRaceLabelShimInstalled) {
                 // turn off tooltip while animating to avoid 'touched' races
                 chart.update({
                     tooltip: { enabled: !playing },
-                    plotOptions: { series: { states: { hover: { enabled: !playing } } } }
+                    plotOptions: {
+                        series: {
+                            states: {
+                                hover: {
+                                    enabled: !playing
+                                }
+                            }
+                        },
+                        enableMouseTracking: !playing
+                    }
                 }, false, false, false);
                 chart.redraw(false);
             };
@@ -391,8 +400,11 @@ if (!Highcharts._barRaceLabelShimInstalled) {
             const doUpdateNow = (idx) => {
                 const minIdx = 0;
                 const maxIdx = timeline.length - 1;
+
                 if (!Number.isFinite(idx)) idx = minIdx;
                 idx = Math.max(minIdx, Math.min(maxIdx, idx));
+
+                // if already at this index, do nothing
                 if (idx === this._currentIdx && chart.series[0].data?.length) return;
 
                 this._currentIdx = idx;
@@ -400,16 +412,27 @@ if (!Highcharts._barRaceLabelShimInstalled) {
 
                 // reset pointer/hover before mutating
                 try {
+                    chart.hoverPoints = [];
+                    chart.hoverPoint = null;
                     chart.pointer?.reset?.({ touched: false });
                 } catch { }
 
                 const label = timeline[idx];
-
-                // if at end, update once and stop
                 const atEnd = idx >= maxIdx;
 
+                const s = chart.series && chart.series[0];
+                if (!s) return;
+
+                // compute data for this frame
+                const newData = getData(label);
+
+                // update subtitle
                 chart.update({ subtitle: { text: getSubtitle(label) } }, false, false, false);
-                chart.series[0].update({ name: String(label), data: getData(label) }, true, { duration: 500 });
+
+                s.setData(newData, false, { duration: 0 });
+                s.update({ name: String(label) }, false);
+
+                chart.redraw();
 
                 if (atEnd) pause(btn);
             };
@@ -457,7 +480,7 @@ if (!Highcharts._barRaceLabelShimInstalled) {
                 button.title = 'pause';
                 button.innerText = '⏸';
                 button.style.fontSize = '22px';
-                
+
                 if (chart.sequenceTimer) cancelAnimationFrame(chart.sequenceTimer);
                 setPlayingVisuals(true);
                 chart.sequenceTimer = requestAnimationFrame(tick);
