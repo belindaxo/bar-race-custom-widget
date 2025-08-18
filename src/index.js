@@ -222,18 +222,26 @@ if (!Highcharts._barRaceLabelShimInstalled) {
             const parseTimeKey = (key) => {
                 if (key == null) return null;
                 const s = String(key).trim();
+
+                // Case 1: YYYY (e.g., "2023")
                 if (/^\d{4}$/.test(s)) return { y: +s, m: 1, label: s };
+
+                // Case 2: MMM YYYY (e.g., "JAN 2023")
                 let m = s.match(/^([A-Za-z]{3})\s+(\d{4})$/);
                 if (m) {
                     const mon = MONTHS[m[1].toUpperCase()];
                     const yr = parseInt(m[2], 10);
                     if (mon && Number.isFinite(yr)) return { y: yr, m: mon, label: s };
                 }
-                m = s.match(/^(\d{4})[-\/](\d{1,2})$/);
+
+                // Case 3: MM/YYYY (e.g., "01/2023")
+                m = s.match(/^(\d{1,2})\/(\d{4})$/);
                 if (m) {
-                    const yr = +m[1], mon = Math.max(1, Math.min(12, +m[2]));
+                    const mon = Math.max(1, Math.min(12, +m[1]));
+                    const yr = +m[2];
                     return { y: yr, m: mon, label: s };
                 }
+
                 return null;
             };
 
@@ -371,54 +379,86 @@ if (!Highcharts._barRaceLabelShimInstalled) {
                 button.title = 'play';
                 button.innerText = '▶';
                 button.style.fontSize = '18px';
-                if (chart.sequenceTimer) clearInterval(chart.sequenceTimer);
-                chart.sequenceTimer = undefined;
+
+                if (chart.sequenceTimer) {
+                    clearInterval(chart.sequenceTimer);
+                    chart.sequenceTimer = undefined;
+                }
+
                 setPlayingVisuals(false);
             };
 
             const doUpdateNow = (idx) => {
+                const minIdx = 0;
+                const maxIdx = timeline.length - 1;
                 if (!Number.isFinite(idx)) idx = minIdx;
                 idx = Math.max(minIdx, Math.min(maxIdx, idx));
+                if (idx === this._currentIdx && chart.series[0].data?.length) return;
+
                 this._currentIdx = idx;
                 input.value = String(idx);
 
-                const label = currentLabel();
+                // reset pointer/hover before mutating
+                try {
+                    chart.pointer?.reset?.({ touched: false });
+                } catch { }
 
-                if (idx >= maxIdx) pause(btn);
+                const label = timeline[idx];
+
+                // if at end, update once and stop
+                const atEnd = idx >= maxIdx;
 
                 chart.update({ subtitle: { text: getSubtitle(label) } }, false, false, false);
-                chart.series[0].update({
-                    name: String(label),
-                    data: getData(label)
-                }, true, { duration: 500 });
+                chart.series[0].update({ name: String(label), data: getData(label) }, true, { duration: 500 });
+
+                if (atEnd) pause(btn);
             };
+
+            let pendingIdx = null;
+            let rafHandle = 0;
 
             // rAF-batched updater (prevents stacked updates during play)
             const requestUpdate = (idx) => {
-                this._pendingIdx = idx;
-                if (this._raf) return;
-                this._raf = requestAnimationFrame(() => {
-                    this._raf = 0;
-                    const next = this._pendingIdx;
-                    this._pendingIdx = null;
+                pendingIdx = idx;
+                if (rafHandle) return;
+                rafHandle = requestAnimationFrame(() => {
+                    rafHandle = 0;
+                    const next = pendingIdx;
+                    pendingIdx = null;
                     doUpdateNow(next);
                 });
             };
 
             const doUpdate = (increment) => {
-                let idx = parseInt(input.value || '0', 10);
+                const minIdx = 0;
+                const maxIdx = timeline.length - 1;
                 if (!Number.isFinite(idx)) idx = minIdx;
                 if (increment) idx += increment;
+                idx = Math.max(minIdx, Math.min(maxIdx, idx));
                 requestUpdate(idx);
+            };
+
+            const PLAY_STEP_MS = 500;
+            let playAnchor = 0;
+
+            const tick = (ts) => {
+                if (!chart.sequenceTimer) return;
+                if (!playAnchor) playAnchor = ts;
+                if (ts - playAnchor >= PLAY_STEP_MS) {
+                    playAnchor += PLAY_STEP_MS;
+                    doUpdate(1);
+                }
+                chart.sequenceTimer = requestAnimationFrame(tick);
             };
 
             const play = (button) => {
                 button.title = 'pause';
                 button.innerText = '⏸';
                 button.style.fontSize = '22px';
-                if (chart.sequenceTimer) clearInterval(chart.sequenceTimer);
+                
+                if (chart.sequenceTimer) cancelAnimationFrame(chart.sequenceTimer);
                 setPlayingVisuals(true);
-                chart.sequenceTimer = setInterval(() => doUpdate(1), 500);
+                chart.sequenceTimer = requestAnimationFrame(tick);
             };
 
             // wire events
