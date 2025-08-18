@@ -4,16 +4,13 @@ import { processSeriesData } from './data/dataProcessor';
 import { applyHighchartsDefaults } from './config/highchartsSetup';
 import { createChartStylesheet } from './config/styles';
 
-/* =========================
-   Highcharts label tween shim
-   ========================= */
+// Install the data label text animation shim
 if (!Highcharts._barRaceLabelShimInstalled) {
     (function (H) {
         const FLOAT = /^-?\d+\.?\d*$/;
 
         H.Fx.prototype.textSetter = function () {
-            const chart = H.charts[this.elem?.renderer?.chartIndex];
-            if (!chart) return;
+            const chart = H.charts[this.elem.renderer.chartIndex];
 
             let thousandsSep = chart.numberFormatter('1000.0')[1];
             if (/[0-9]/.test(thousandsSep)) {
@@ -30,14 +27,12 @@ if (!Highcharts._barRaceLabelShimInstalled) {
                 const e = parseFloat(endValue);
                 currentValue = chart.numberFormatter(Math.round(s + (e - s) * this.pos), 0);
             }
-            if (this.elem) {
-                this.elem.endText = this.end;
-                this.elem.attr && this.elem.attr(this.prop, currentValue, null, true);
-            }
+            this.elem.endText = this.end;
+            this.elem.attr(this.prop, currentValue, null, true);
         };
 
         H.SVGElement.prototype.textGetter = function () {
-            const ct = this.text?.element?.textContent || '';
+            const ct = this.text.element.textContent || '';
             return this.endText ? this.endText : ct.substring(0, Math.floor(ct.length / 2));
         };
 
@@ -45,7 +40,7 @@ if (!Highcharts._barRaceLabelShimInstalled) {
             const attr = H.SVGElement.prototype.attr;
             const chart = this.chart;
 
-            if (chart && chart.sequenceTimer) {
+            if (chart.sequenceTimer) {
                 this.points.forEach(point =>
                     (point.dataLabels || []).forEach(label => {
                         label.attr = function (hash) {
@@ -69,88 +64,83 @@ if (!Highcharts._barRaceLabelShimInstalled) {
     Highcharts._barRaceLabelShimInstalled = true;
 }
 
-/* =========================
-   Helpers: timeline parsing
-   ========================= */
-const MONTHS = {
-    JAN: 1, FEB: 2, MAR: 3, APR: 4, MAY: 5, JUN: 6,
-    JUL: 7, AUG: 8, SEP: 9, OCT: 10, NOV: 11, DEC: 12
-};
+/* ---------- SAFETY PATCHES: HC teardown hardening (idempotent destroy + null-safe erase) ---------- */
+(function (H) {
+    const wrap = H.wrap;
 
-function parseLabelToYM(label) {
-    if (label == null) return null;
-    const s = String(label).trim();
+    // Idempotent destroy for main types
+    if (H.Chart) wrap(H.Chart.prototype, 'destroy', function (proceed) { if (this.___destroyed) return; this.___destroyed = true; try { proceed.apply(this, [].slice.call(arguments, 1)); } catch { } });
+    if (H.Series) wrap(H.Series.prototype, 'destroy', function (proceed) { if (this.___destroyed) return; this.___destroyed = true; try { proceed.apply(this, [].slice.call(arguments, 1)); } catch { } });
+    if (H.Axis) wrap(H.Axis.prototype, 'destroy', function (proceed) { if (this.___destroyed) return; this.___destroyed = true; try { proceed.apply(this, [].slice.call(arguments, 1)); } catch { } });
+    if (H.Point) wrap(H.Point.prototype, 'destroy', function (proceed) { if (this.___destroyed) return; this.___destroyed = true; try { proceed.apply(this, [].slice.call(arguments, 1)); } catch { } });
 
-    // YYYY
-    if (/^\d{4}$/.test(s)) {
-        return { year: parseInt(s, 10), month: 0 };
+    // Null-safe erase
+    const origErase = H.erase;
+    H.erase = function (arr, item) {
+        if (!arr || typeof arr.length !== 'number') return;
+        const i = (H.inArray ? H.inArray(item, arr) : arr.indexOf(item));
+        if (i > -1) arr.splice(i, 1);
+    };
+
+    // Guard destroyElements to survive races
+    if (H.Chart && H.Chart.prototype && H.Chart.prototype.destroyElements) {
+        wrap(H.Chart.prototype, 'destroyElements', function (proceed) {
+            try { proceed.apply(this, [].slice.call(arguments, 1)); } catch { }
+        });
     }
+})(Highcharts);
+/* -------------------------------------------------------------------------------------------------- */
 
-    // MMM YYYY (case-insensitive on MMM)
-    const m1 = /^([A-Za-z]{3})\s+(\d{4})$/.exec(s);
-    if (m1) {
-        const mon = m1[1].toUpperCase();
-        const month = MONTHS[mon];
-        if (month) return { year: parseInt(m1[2], 10), month };
-    }
+/* ----- EXTRA SAFETY PATCHES for HC 12.x: SVG teardown idempotent ----- */
+(function (H) {
+    if (!H || !H.SVGElement) return;
+    const wrap = H.wrap;
 
-    // YYYY-MM
-    const m2 = /^(\d{4})-(\d{2})$/.exec(s);
-    if (m2) {
-        return { year: parseInt(m2[1], 10), month: parseInt(m2[2], 10) };
-    }
+    // Make every SVGElement destroy idempotent
+    wrap(H.SVGElement.prototype, 'destroy', function (proceed) {
+        if (this.___destroyed) return;
+        this.___destroyed = true;
 
-    // MM/YYYY
-    const m3 = /^(\d{2})\/(\d{4})$/.exec(s);
-    if (m3) {
-        return { year: parseInt(m3[2], 10), month: parseInt(m3[1], 10) };
-    }
+        // Best-effort: ensure some renderer collections are arrays so internal erase() won't see null
+        try {
+            const r = this.renderer;
+            if (r) {
+                if (Array.isArray(r.alignedObjects) === false) r.alignedObjects = [];
+                if (Array.isArray(r.gradients) === false) r.gradients = [];
+            }
+            const chart = r && Highcharts.charts ? Highcharts.charts[r.chartIndex] : null;
+            if (chart) {
+                chart.hoverPoints = chart.hoverPoints || [];
+                chart.hoverPoint = chart.hoverPoint || null;
+            }
+        } catch { }
 
-    return null; // unknown format
-}
-
-/** Returns a sorted timeline of labels plus a lookup map. */
-function buildTimeline(structuredData) {
-    const labels = Object.keys(structuredData || {});
-    if (!labels.length) return { timeline: [], labelToIndex: new Map() };
-
-    // map each label to sortable (year, month)
-    const enriched = labels.map((lbl, i) => {
-        const ym = parseLabelToYM(lbl);
-        return {
-            label: lbl,
-            year: ym ? ym.year : Number.NaN,
-            month: ym ? ym.month : 0,
-            // keep original index for a stable fallback
-            orig: i,
-            parsed: !!ym
-        };
+        try { proceed.apply(this, Array.prototype.slice.call(arguments, 1)); }
+        catch (e) { /* swallow second-pass SVG cleanup in SAC */ }
     });
 
-    // sort:
-    // - parsed ones by year asc, month asc
-    // - unparsed ones to the end, original order
-    enriched.sort((a, b) => {
-        if (a.parsed && b.parsed) {
-            if (a.year !== b.year) return a.year - b.year;
-            return a.month - b.month;
-        }
-        if (a.parsed && !b.parsed) return -1;
-        if (!a.parsed && b.parsed) return 1;
-        return a.orig - b.orig;
-    });
-
-    const timeline = enriched.map(e => e.label);
-    const labelToIndex = new Map();
-    timeline.forEach((lbl, idx) => labelToIndex.set(lbl, idx));
-    return { timeline, labelToIndex };
-}
+    // Tooltip/pointer safety
+    if (H.Tooltip && H.Tooltip.prototype) {
+        wrap(H.Tooltip.prototype, 'destroy', function (proceed) {
+            if (this.___destroyed) return;
+            this.___destroyed = true;
+            try { proceed.apply(this, Array.prototype.slice.call(arguments, 1)); } catch { }
+        });
+    }
+    if (H.Pointer && H.Pointer.prototype) {
+        wrap(H.Pointer.prototype, 'reset', function (proceed) {
+            try { proceed.apply(this, Array.prototype.slice.call(arguments, 1)); } catch { }
+        });
+    }
+})(Highcharts);
+/* --------------------------------------------------------------------- */
 
 (function () {
     class BarRace extends HTMLElement {
         constructor() {
             super();
             this.attachShadow({ mode: 'open' });
+
             this.shadowRoot.adoptedStyleSheets = [createChartStylesheet()];
             this.shadowRoot.innerHTML = `
         <div id="parent-container">
@@ -163,61 +153,64 @@ function buildTimeline(structuredData) {
         </div>
       `;
 
-            // state
+            // internal state
             this._chart = null;
+            this._currentYear = undefined;
             this._renderTimer = null;
-            this._isDestroying = false;
-            this._dragging = false;
 
-            // timeline state
-            this._timeline = [];     // array of labels in chronological order
-            this._currentIndex = 0;  // frame index (0..timeline.length-1)
+            // RAF batching
+            this._raf = 0;
+            this._pendingYear = null;
 
-            // bound handlers
+            // handlers
             this._onPlayPause = null;
             this._onSliderInput = null;
-            this._onSliderChange = null;
-            this._onSliderDown = null;
-            this._onSliderMove = null;
-            this._onSliderUp = null;
-            this._onSliderCancel = null;
+
+            // flags
+            this._isDestroying = false;
+            this._dragging = false;
         }
 
-        onCustomWidgetResize() { this._scheduleRender(); }
-        onCustomWidgetAfterUpdate() { this._scheduleRender(); }
+        onCustomWidgetResize() {
+            this._scheduleRender();
+        }
+        onCustomWidgetAfterUpdate() {
+            this._scheduleRender();
+        }
 
         onCustomWidgetDestroy() {
             if (this._isDestroying) return;
             this._isDestroying = true;
 
-            const btn = this.shadowRoot.getElementById('play-pause-button');
-            const input = this.shadowRoot.getElementById('play-range');
+            // cancel any scheduled rAF update
+            if (this._raf) { cancelAnimationFrame(this._raf); this._raf = 0; }
+            this._pendingYear = null;
+            this._dragging = false;
 
-            try {
-                if (this._chart && this._chart.sequenceTimer) {
-                    clearInterval(this._chart.sequenceTimer);
-                    this._chart.sequenceTimer = undefined;
-                }
-            } catch { }
+            // pause autoplay first
+            if (this._chart && this._chart.sequenceTimer) {
+                clearInterval(this._chart.sequenceTimer);
+                this._chart.sequenceTimer = undefined;
+            }
 
             try { Highcharts.stop && Highcharts.stop(this._chart); } catch { }
 
-            // detach DOM listeners
+            // detach listeners
+            const btn = this.shadowRoot.getElementById('play-pause-button');
+            const input = this.shadowRoot.getElementById('play-range');
             if (btn && this._onPlayPause) btn.removeEventListener('click', this._onPlayPause);
             if (input && this._onSliderInput) input.removeEventListener('input', this._onSliderInput);
-            if (input && this._onSliderChange) input.removeEventListener('change', this._onSliderChange);
-            if (input && this._onSliderDown) input.removeEventListener('pointerdown', this._onSliderDown);
-            if (input && this._onSliderMove) input.removeEventListener('pointermove', this._onSliderMove);
-            if (input && this._onSliderUp) input.removeEventListener('pointerup', this._onSliderUp);
-            if (input && this._onSliderCancel) input.removeEventListener('pointercancel', this._onSliderCancel);
 
+            // neutralize hover state before destroy
             try {
                 if (this._chart) {
-                    this._chart.series?.forEach(s => s.update({ data: [] }, false));
-                    this._chart.redraw(false);
-                    this._chart.destroy();
+                    this._chart.hoverPoints = [];
+                    this._chart.hoverPoint = null;
+                    this._chart.pointer?.reset?.(true);
                 }
             } catch { }
+
+            try { this._chart && this._chart.destroy(); } catch { }
             this._chart = null;
             this._isDestroying = false;
         }
@@ -236,13 +229,16 @@ function buildTimeline(structuredData) {
         }
 
         _renderChart() {
-            const binding = this.dataBinding;
-            if (!binding || binding.state !== 'success' || !binding.data || !binding.data.length) {
+            // guard: SAC might call while detaching
+            if (this._isDestroying || !this.isConnected) return;
+
+            const dataBinding = this.dataBinding;
+            if (!dataBinding || dataBinding.state !== 'success' || !dataBinding.data || dataBinding.data.length === 0) {
                 this._teardownChart();
                 return;
             }
-
-            const { data, metadata } = binding;
+            console.log('dataBinding:', dataBinding);
+            const { data, metadata } = dataBinding;
             const { dimensions, measures } = parseMetadata(metadata);
             if (dimensions.length < 2 || measures.length < 1) {
                 this._teardownChart();
@@ -250,106 +246,96 @@ function buildTimeline(structuredData) {
             }
 
             const structuredData = processSeriesData(data, dimensions, measures);
+            console.log('structuredData:', structuredData);
 
-            // Build timeline from structuredData keys (handles YYYY, MMM YYYY, YYYY-MM, MM/YYYY)
-            const { timeline } = buildTimeline(structuredData);
-            if (!timeline.length) {
+            const labelKeys = Object.keys(structuredData);
+            let years;
+            const numericYears = labelKeys.map(k => Number(k));
+            if (numericYears.every(Number.isFinite)) {
+                years = numericYears.sort((a, b) => a - b);
+            } else {
+                years = labelKeys;
+            }
+            if (!years.length) {
                 this._teardownChart();
                 return;
             }
-            this._timeline = timeline;
+
+            const startYear = years[0];
+            console.log('startYear: ', startYear);
+            const endYear = years[years.length - 1];
+            console.log('endYear: ', endYear);
+            const nbr = 10;
 
             const btn = this.shadowRoot.getElementById('play-pause-button');
             const input = this.shadowRoot.getElementById('play-range');
+            const containerEl = this.shadowRoot.getElementById('container');
+            if (!containerEl) return; // container detached
 
-            // slider is 0..N-1
-            const maxIndex = this._timeline.length - 1;
-            const minStr = '0';
-            const maxStr = String(maxIndex);
+            // slider bounds
+            const minStr = String(startYear);
+            const maxStr = String(endYear);
             if (input.min !== minStr) input.min = minStr;
             if (input.max !== maxStr) input.max = maxStr;
             input.step = '1';
 
-            // keep or clamp current index
+            // current year with clamping
             const prev = Number(input.value);
             if (Number.isFinite(prev)) {
-                this._currentIndex = Math.max(0, Math.min(maxIndex, prev));
+                this._currentYear = Math.max(Number(startYear), Math.min(Number(endYear), prev));
+                input.value = String(this._currentYear);
             } else {
-                this._currentIndex = 0;
+                this._currentYear = Number(startYear);
+                input.value = String(startYear);
             }
-            input.value = String(this._currentIndex);
 
-            const getLabel = i => this._timeline[i] ?? this._timeline[0];
-
-            const getData = (i) => {
-                const key = getLabel(i);
-                const frame = structuredData?.[key] || {};
-                return Object.entries(frame)
-                    .filter(([k]) => k !== 'Totals') // exclude optional Totals bucket from bars
+            const getData = (year) => {
+                const yKey = String(year);
+                const timeData = structuredData?.[yKey] || {};
+                return Object.entries(timeData)
                     .map(([category, value]) => [category, Number(value) || 0])
                     .sort((a, b) => b[1] - a[1])
-                    .slice(0, 10);
+                    .slice(0, nbr);
             };
 
-            const getSubtitle = (i) => {
-                const key = getLabel(i);
-                const frame = structuredData?.[key] || {};
-                let total = (typeof frame.Totals === 'number')
-                    ? frame.Totals
-                    : Object.values(frame).reduce((s, v) => s + (Number(v) || 0), 0);
-                total = Number.isFinite(total) ? total : 0;
-                const pretty = Highcharts.numberFormat(total, 0, '.', ',');
+            const getSubtitle = (year) => {
+                const yKey = String(year);
+                const sum = Object.values(structuredData[yKey] || {}).reduce((s, v) => s + (Number(v) || 0), 0);
+                const total = Highcharts.numberFormat(sum, 0, '.', ',');
                 return `
-          <span style="font-size: 64px">${key}</span>
+          <span style="font-size: 80px">${year}</span>
           <br>
-          <span style="font-size: 20px">Total: <b>${pretty}</b></span>
+          <span style="font-size: 22px">
+          Total: <b>${total}</b>
+          </span>
         `;
             };
 
             applyHighchartsDefaults();
 
-            // Create or refresh chart
             if (!this._chart) {
                 const chartOptions = {
-                    chart: {
-                        animation: { duration: 500 },
-                        marginRight: 50
-                    },
+                    chart: { animation: { duration: 500 }, marginRight: 50 },
                     title: { text: 'Chart Title', align: 'left' },
                     subtitle: {
-                        text: getSubtitle(this._currentIndex),
-                        floating: true,
-                        align: 'right',
-                        verticalAlign: 'middle',
-                        useHTML: true,
-                        y: 90,
-                        x: -20
+                        text: getSubtitle(this._currentYear),
+                        floating: true, align: 'right', verticalAlign: 'middle',
+                        useHTML: true, y: 100, x: -20
                     },
                     credits: { enabled: false },
                     legend: { enabled: false },
                     xAxis: { type: 'category' },
-                    yAxis: {
-                        opposite: true,
-                        tickPixelInterval: 150,
-                        title: { text: null }
-                    },
+                    yAxis: { opposite: true, tickPixelInterval: 150, title: { text: null } },
                     plotOptions: {
                         series: {
-                            animation: false,
-                            groupPadding: 0,
-                            pointPadding: 0.1,
-                            borderWidth: 0,
+                            animation: false, groupPadding: 0, pointPadding: 0.1, borderWidth: 0,
                             colorByPoint: true,
                             dataSorting: { enabled: true, matchByName: true },
                             type: 'bar',
                             dataLabels: { enabled: true }
                         }
                     },
-                    series: [{
-                        type: 'bar',
-                        name: String(getLabel(this._currentIndex)),
-                        data: getData(this._currentIndex)
-                    }],
+                    series: [{ type: 'bar', name: String(this._currentYear), data: getData(this._currentYear) }],
                     responsive: {
                         rules: [{
                             condition: { maxWidth: 550 },
@@ -358,81 +344,63 @@ function buildTimeline(structuredData) {
                                 subtitle: { x: 0 },
                                 plotOptions: {
                                     series: {
-                                        dataLabels: [{
-                                            enabled: true, y: 8
-                                        }, {
-                                            enabled: true,
-                                            format: '{point.name}',
-                                            y: -8,
-                                            style: { fontWeight: 'normal', opacity: 0.7 }
-                                        }]
+                                        dataLabels: [
+                                            { enabled: true, y: 8 },
+                                            { enabled: true, format: '{point.name}', y: -8, style: { fontWeight: 'normal', opacity: 0.7 } }
+                                        ]
                                     }
                                 }
                             }
                         }]
                     }
                 };
-                this._chart = Highcharts.chart(this.shadowRoot.getElementById('container'), chartOptions);
+                this._chart = Highcharts.chart(containerEl, chartOptions);
             } else {
-                try {
-                    this._chart.update({ subtitle: { text: getSubtitle(this._currentIndex) } }, false, false, false);
-                    this._chart.series[0]?.update({
-                        name: String(getLabel(this._currentIndex)),
-                        data: getData(this._currentIndex)
-                    }, true, { duration: 500 });
-                } catch { }
+                this._chart.update({ subtitle: { text: getSubtitle(this._currentYear) } }, false, false, false);
+                this._chart.series[0].update({ name: String(this._currentYear), data: getData(this._currentYear) }, true, { duration: 500 });
             }
 
             const chart = this._chart;
 
             const pause = (button) => {
-                try {
-                    button.title = 'play';
-                    button.innerText = '▶';
-                    button.style.fontSize = '18px';
-                    if (chart && chart.sequenceTimer) {
-                        clearInterval(chart.sequenceTimer);
-                        chart.sequenceTimer = undefined;
-                    }
-                } catch { }
+                button.title = 'play';
+                button.innerText = '▶';
+                button.style.fontSize = '18px';
+                if (chart.sequenceTimer) clearInterval(chart.sequenceTimer);
+                chart.sequenceTimer = undefined;
             };
 
-            const atLastFrame = () => this._currentIndex >= (this._timeline.length - 1);
-
+            // RAF-batched updates
             const doUpdate = (increment) => {
-                // If the chart is gone (teardown race), stop.
-                if (!this._chart || this._chart.destroyed) return;
-
                 if (increment) {
-                    const next = parseInt(input.value, 10) + increment;
-                    input.value = String(next);
+                    input.value = String(parseInt(input.value, 10) + increment);
                 }
 
-                let idx = parseInt(input.value, 10);
-                if (!Number.isFinite(idx)) idx = 0;
+                let yr = parseInt(input.value, 10);
+                if (!Number.isFinite(yr)) yr = Number(startYear);
+                yr = Math.max(Number(startYear), Math.min(Number(endYear), yr));
+                input.value = String(yr);
 
-                // clamp
-                const maxI = this._timeline.length - 1;
-                if (idx < 0) idx = 0;
-                if (idx > maxI) idx = maxI;
-                input.value = String(idx);
+                this._pendingYear = yr;
+                if (this._raf) return;
 
-                // reached end? pause so we don't hammer the same frame
-                if (idx >= maxI) pause(btn);
+                this._raf = requestAnimationFrame(() => {
+                    this._raf = 0;
+                    const year = this._pendingYear;
+                    this._pendingYear = null;
 
-                // apply
-                try {
-                    const label = getLabel(idx);
-                    this._chart.update({ subtitle: { text: getSubtitle(idx) } }, false, false, false);
-                    const s = this._chart.series && this._chart.series[0];
-                    if (s) {
-                        s.update({ name: String(label), data: getData(idx) }, true, { duration: 500 });
+                    if (this._isDestroying || !this._chart) return;
+                    const chartNow = this._chart;
+
+                    if (year >= Number(endYear)) {
+                        pause(btn);
                     }
-                    this._currentIndex = idx;
-                } catch {
-                    // If Highcharts throws inside a teardown/update race, stop autoplay to be safe.
-                    pause(btn);
-                }
+
+                    chartNow.update({ subtitle: { text: getSubtitle(year) } }, false, false, false);
+                    chartNow.series[0].update({ name: String(year), data: getData(year) }, true, { duration: 500 });
+
+                    this._currentYear = year;
+                });
             };
 
             const play = (button) => {
@@ -440,49 +408,17 @@ function buildTimeline(structuredData) {
                 button.innerText = '⏸';
                 button.style.fontSize = '22px';
                 if (chart.sequenceTimer) clearInterval(chart.sequenceTimer);
-                // If we are already at the last frame, restart from 0 for autoplay
-                if (atLastFrame()) {
-                    this._currentIndex = 0;
-                    input.value = '0';
-                    doUpdate(0);
-                }
                 chart.sequenceTimer = setInterval(() => doUpdate(1), 500);
             };
 
-            // wire controls
+            // (re)bind listeners
             if (this._onPlayPause) btn.removeEventListener('click', this._onPlayPause);
-            this._onPlayPause = () => { (chart.sequenceTimer ? pause : play)(btn); };
+            this._onPlayPause = () => { if (chart.sequenceTimer) pause(btn); else play(btn); };
             btn.addEventListener('click', this._onPlayPause);
 
             if (this._onSliderInput) input.removeEventListener('input', this._onSliderInput);
             this._onSliderInput = () => doUpdate(0);
             input.addEventListener('input', this._onSliderInput);
-
-            if (this._onSliderChange) input.removeEventListener('change', this._onSliderChange);
-            this._onSliderChange = () => doUpdate(0);
-            input.addEventListener('change', this._onSliderChange);
-
-            if (this._onSliderDown) input.removeEventListener('pointerdown', this._onSliderDown);
-            this._onSliderDown = () => {
-                if (chart.sequenceTimer) pause(btn);
-                this._dragging = true;
-            };
-            input.addEventListener('pointerdown', this._onSliderDown);
-
-            if (this._onSliderMove) input.removeEventListener('pointermove', this._onSliderMove);
-            this._onSliderMove = () => {
-                if (!this._dragging) return;
-                doUpdate(0);
-            };
-            input.addEventListener('pointermove', this._onSliderMove);
-
-            if (this._onSliderUp) input.removeEventListener('pointerup', this._onSliderUp);
-            this._onSliderUp = () => { this._dragging = false; };
-            input.addEventListener('pointerup', this._onSliderUp);
-
-            if (this._onSliderCancel) input.removeEventListener('pointercancel', this._onSliderCancel);
-            this._onSliderCancel = () => { this._dragging = false; };
-            input.addEventListener('pointercancel', this._onSliderCancel);
 
             input.style.touchAction = 'none';
         }
@@ -491,33 +427,33 @@ function buildTimeline(structuredData) {
             if (this._isDestroying) return;
             this._isDestroying = true;
 
+            // cancel rAF and reset state
+            if (this._raf) { cancelAnimationFrame(this._raf); this._raf = 0; }
+            this._pendingYear = null;
+            this._dragging = false;
+
             const btn = this.shadowRoot.getElementById('play-pause-button');
             const input = this.shadowRoot.getElementById('play-range');
 
-            try {
-                if (this._chart && this._chart.sequenceTimer) {
-                    clearInterval(this._chart.sequenceTimer);
-                    this._chart.sequenceTimer = undefined;
-                }
-            } catch { }
-
+            if (this._chart && this._chart.sequenceTimer) {
+                clearInterval(this._chart.sequenceTimer);
+                this._chart.sequenceTimer = undefined;
+            }
             try { Highcharts.stop && Highcharts.stop(this._chart); } catch { }
 
             if (btn && this._onPlayPause) btn.removeEventListener('click', this._onPlayPause);
             if (input && this._onSliderInput) input.removeEventListener('input', this._onSliderInput);
-            if (input && this._onSliderChange) input.removeEventListener('change', this._onSliderChange);
-            if (input && this._onSliderDown) input.removeEventListener('pointerdown', this._onSliderDown);
-            if (input && this._onSliderMove) input.removeEventListener('pointermove', this._onSliderMove);
-            if (input && this._onSliderUp) input.removeEventListener('pointerup', this._onSliderUp);
-            if (input && this._onSliderCancel) input.removeEventListener('pointercancel', this._onSliderCancel);
 
+            // neutralize hover state then destroy
             try {
                 if (this._chart) {
-                    this._chart.series?.forEach(s => s.update({ data: [] }, false));
-                    this._chart.redraw(false);
-                    this._chart.destroy();
+                    this._chart.hoverPoints = [];
+                    this._chart.hoverPoint = null;
+                    this._chart.pointer?.reset?.(true);
                 }
             } catch { }
+
+            try { if (this._chart) this._chart.destroy(); } catch { }
             this._chart = null;
             this._isDestroying = false;
         }
