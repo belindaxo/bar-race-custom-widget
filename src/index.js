@@ -143,15 +143,15 @@ if (!Highcharts._barRaceLabelShimInstalled) {
 
             this.shadowRoot.adoptedStyleSheets = [createChartStylesheet()];
             this.shadowRoot.innerHTML = `
-        <div id="parent-container">
-          <div id="play-controls">
-            <button id="play-pause-button" title="play" style="margin-left: 10px; width: 45px; height: 45px; cursor: pointer; border: 1px solid #004b8d;
-              border-radius: 25px; color: white; background-color: #004b8d; transition: background-color 250ms; font-size: 18px;">▶</button>
-            <input id="play-range" type="range" style="transform: translateY(2.5px); width: calc(100% - 90px); background: #f8f8f8;"/>
-          </div>
-          <div id="container"></div>
-        </div>
-      `;
+            <div id="parent-container">
+            <div id="play-controls">
+                <button id="play-pause-button" title="play" style="margin-left: 10px; width: 45px; height: 45px; cursor: pointer; border: 1px solid #004b8d;
+                border-radius: 25px; color: white; background-color: #004b8d; transition: background-color 250ms; font-size: 18px;">▶</button>
+                <input id="play-range" type="range" style="transform: translateY(2.5px); width: calc(100% - 90px); background: #f8f8f8;"/>
+            </div>
+            <div id="container"></div>
+            </div>
+        `;
 
             // internal state
             this._chart = null;
@@ -229,9 +229,6 @@ if (!Highcharts._barRaceLabelShimInstalled) {
         }
 
         _renderChart() {
-            // guard: SAC might call while detaching
-            if (this._isDestroying || !this.isConnected) return;
-
             const dataBinding = this.dataBinding;
             if (!dataBinding || dataBinding.state !== 'success' || !dataBinding.data || dataBinding.data.length === 0) {
                 this._teardownChart();
@@ -248,94 +245,151 @@ if (!Highcharts._barRaceLabelShimInstalled) {
             const structuredData = processSeriesData(data, dimensions, measures);
             console.log('structuredData:', structuredData);
 
-            const labelKeys = Object.keys(structuredData);
-            let years;
-            const numericYears = labelKeys.map(k => Number(k));
-            if (numericYears.every(Number.isFinite)) {
-                years = numericYears.sort((a, b) => a - b);
-            } else {
-                years = labelKeys;
-            }
-            if (!years.length) {
+            // --- Helpers to parse/sort time keys ---
+            const MONTHS = {
+                JAN: 1, FEB: 2, MAR: 3, APR: 4, MAY: 5, JUN: 6,
+                JUL: 7, AUG: 8, SEP: 9, OCT: 10, NOV: 11, DEC: 12
+            };
+
+            // returns {year:number, month:number} or null if unparseable
+            const parseTimeKey = (key) => {
+                if (key == null) return null;
+                const s = String(key).trim();
+
+                // Case 1: pure year "2021"
+                if (/^\d{4}$/.test(s)) {
+                    return { year: parseInt(s, 10), month: 1 }; // treat as Jan for ordering
+                }
+
+                // Case 2: "MMM YYYY" like "SEP 2021" (case-insensitive)
+                const m = s.match(/^([A-Za-z]{3})\s+(\d{4})$/);
+                if (m) {
+                    const mon = MONTHS[m[1].toUpperCase()];
+                    const yr = parseInt(m[2], 10);
+                    if (mon && Number.isFinite(yr)) return { year: yr, month: mon };
+                }
+
+                // Optional: handle "YYYY-MM" or "YYYY-M"
+                const m2 = s.match(/^(\d{4})[-\/](\d{1,2})$/);
+                if (m2) {
+                    const yr = parseInt(m2[1], 10);
+                    const mon = Math.max(1, Math.min(12, parseInt(m2[2], 10)));
+                    if (Number.isFinite(yr) && Number.isFinite(mon)) return { year: yr, month: mon };
+                }
+
+                return null;
+            };
+
+            // Build a timeline of labels sorted chronologically
+            const labels = Object.keys(structuredData);
+            if (!labels.length) {
                 this._teardownChart();
                 return;
             }
 
-            const startYear = years[0];
-            console.log('startYear: ', startYear);
-            const endYear = years[years.length - 1];
-            console.log('endYear: ', endYear);
+            const timeline = labels
+                .map(lbl => ({ lbl, ts: parseTimeKey(lbl) }))
+                .filter(x => x.ts !== null)            // drop unparseable keys
+                .sort((a, b) => a.ts.year - b.ts.year || a.ts.month - b.ts.month)
+                .map(x => x.lbl);
+
+            if (!timeline.length) {
+                this._teardownChart();
+                return;
+            }
+
+            const startLabel = timeline[0];
+            const endLabel = timeline[timeline.length - 1];
+            console.log('startLabel:', startLabel);
+            console.log('endLabel:', endLabel);
+
             const nbr = 10;
 
             const btn = this.shadowRoot.getElementById('play-pause-button');
             const input = this.shadowRoot.getElementById('play-range');
-            const containerEl = this.shadowRoot.getElementById('container');
-            if (!containerEl) return; // container detached
 
-            // slider bounds
-            const minStr = String(startYear);
-            const maxStr = String(endYear);
-            if (input.min !== minStr) input.min = minStr;
-            if (input.max !== maxStr) input.max = maxStr;
+            // Slider is now index-based
+            const minIdx = 0;
+            const maxIdx = timeline.length - 1;
+            if (input.min !== String(minIdx)) input.min = String(minIdx);
+            if (input.max !== String(maxIdx)) input.max = String(maxIdx);
             input.step = '1';
 
-            // current year with clamping
-            const prev = Number(input.value);
-            if (Number.isFinite(prev)) {
-                this._currentYear = Math.max(Number(startYear), Math.min(Number(endYear), prev));
-                input.value = String(this._currentYear);
+            // preserve current index if valid, else snap to 0
+            const prevIdx = Number(input.value);
+            if (Number.isFinite(prevIdx)) {
+                this._currentIdx = Math.max(minIdx, Math.min(maxIdx, prevIdx));
+                input.value = String(this._currentIdx);
             } else {
-                this._currentYear = Number(startYear);
-                input.value = String(startYear);
+                this._currentIdx = 0;
+                input.value = '0';
             }
 
-            const getData = (year) => {
-                const yKey = String(year);
-                const timeData = structuredData?.[yKey] || {};
+            const getData = (label) => {
+                const timeData = structuredData?.[label] || {};
                 return Object.entries(timeData)
                     .map(([category, value]) => [category, Number(value) || 0])
                     .sort((a, b) => b[1] - a[1])
                     .slice(0, nbr);
             };
 
-            const getSubtitle = (year) => {
-                const yKey = String(year);
-                const sum = Object.values(structuredData[yKey] || {}).reduce((s, v) => s + (Number(v) || 0), 0);
+            const getSubtitle = (label) => {
+                const sum = Object.values(structuredData[label] || {}).reduce((s, v) => s + (Number(v) || 0), 0);
                 const total = Highcharts.numberFormat(sum, 0, '.', ',');
                 return `
-          <span style="font-size: 80px">${year}</span>
-          <br>
-          <span style="font-size: 22px">
-          Total: <b>${total}</b>
-          </span>
+            <span style="font-size: 80px">${label}</span>
+            <br>
+            <span style="font-size: 22px">
+            Total: <b>${total}</b>
+            </span>
         `;
             };
+
+            const currentLabel = () => timeline[this._currentIdx];
 
             applyHighchartsDefaults();
 
             if (!this._chart) {
                 const chartOptions = {
-                    chart: { animation: { duration: 500 }, marginRight: 50 },
+                    chart: {
+                        animation: { duration: 500 },
+                        marginRight: 50
+                    },
                     title: { text: 'Chart Title', align: 'left' },
                     subtitle: {
-                        text: getSubtitle(this._currentYear),
-                        floating: true, align: 'right', verticalAlign: 'middle',
-                        useHTML: true, y: 100, x: -20
+                        text: getSubtitle(currentLabel()),
+                        floating: true,
+                        align: 'right',
+                        verticalAlign: 'middle',
+                        useHTML: true,
+                        y: 100,
+                        x: -20
                     },
                     credits: { enabled: false },
                     legend: { enabled: false },
                     xAxis: { type: 'category' },
-                    yAxis: { opposite: true, tickPixelInterval: 150, title: { text: null } },
+                    yAxis: {
+                        opposite: true,
+                        tickPixelInterval: 150,
+                        title: { text: null }
+                    },
                     plotOptions: {
                         series: {
-                            animation: false, groupPadding: 0, pointPadding: 0.1, borderWidth: 0,
+                            animation: false,
+                            groupPadding: 0,
+                            pointPadding: 0.1,
+                            borderWidth: 0,
                             colorByPoint: true,
                             dataSorting: { enabled: true, matchByName: true },
                             type: 'bar',
                             dataLabels: { enabled: true }
                         }
                     },
-                    series: [{ type: 'bar', name: String(this._currentYear), data: getData(this._currentYear) }],
+                    series: [{
+                        type: 'bar',
+                        name: String(currentLabel()),
+                        data: getData(currentLabel())
+                    }],
                     responsive: {
                         rules: [{
                             condition: { maxWidth: 550 },
@@ -344,20 +398,27 @@ if (!Highcharts._barRaceLabelShimInstalled) {
                                 subtitle: { x: 0 },
                                 plotOptions: {
                                     series: {
-                                        dataLabels: [
-                                            { enabled: true, y: 8 },
-                                            { enabled: true, format: '{point.name}', y: -8, style: { fontWeight: 'normal', opacity: 0.7 } }
-                                        ]
+                                        dataLabels: [{
+                                            enabled: true, y: 8
+                                        }, {
+                                            enabled: true,
+                                            format: '{point.name}',
+                                            y: -8,
+                                            style: { fontWeight: 'normal', opacity: 0.7 }
+                                        }]
                                     }
                                 }
                             }
                         }]
                     }
                 };
-                this._chart = Highcharts.chart(containerEl, chartOptions);
+                this._chart = Highcharts.chart(this.shadowRoot.getElementById('container'), chartOptions);
             } else {
-                this._chart.update({ subtitle: { text: getSubtitle(this._currentYear) } }, false, false, false);
-                this._chart.series[0].update({ name: String(this._currentYear), data: getData(this._currentYear) }, true, { duration: 500 });
+                this._chart.update({ subtitle: { text: getSubtitle(currentLabel()) } }, false, false, false);
+                this._chart.series[0].update({
+                    name: String(currentLabel()),
+                    data: getData(currentLabel())
+                }, true, { duration: 500 });
             }
 
             const chart = this._chart;
@@ -370,37 +431,27 @@ if (!Highcharts._barRaceLabelShimInstalled) {
                 chart.sequenceTimer = undefined;
             };
 
-            // RAF-batched updates
             const doUpdate = (increment) => {
                 if (increment) {
                     input.value = String(parseInt(input.value, 10) + increment);
                 }
 
-                let yr = parseInt(input.value, 10);
-                if (!Number.isFinite(yr)) yr = Number(startYear);
-                yr = Math.max(Number(startYear), Math.min(Number(endYear), yr));
-                input.value = String(yr);
+                let idx = parseInt(input.value, 10);
+                if (!Number.isFinite(idx)) idx = minIdx;
+                idx = Math.max(minIdx, Math.min(maxIdx, idx));
+                input.value = String(idx);
 
-                this._pendingYear = yr;
-                if (this._raf) return;
+                this._currentIdx = idx;
+                const label = currentLabel();
 
-                this._raf = requestAnimationFrame(() => {
-                    this._raf = 0;
-                    const year = this._pendingYear;
-                    this._pendingYear = null;
+                // auto-pause at end
+                if (idx >= maxIdx) pause(btn);
 
-                    if (this._isDestroying || !this._chart) return;
-                    const chartNow = this._chart;
-
-                    if (year >= Number(endYear)) {
-                        pause(btn);
-                    }
-
-                    chartNow.update({ subtitle: { text: getSubtitle(year) } }, false, false, false);
-                    chartNow.series[0].update({ name: String(year), data: getData(year) }, true, { duration: 500 });
-
-                    this._currentYear = year;
-                });
+                chart.update({ subtitle: { text: getSubtitle(label) } }, false, false, false);
+                chart.series[0].update({
+                    name: String(label),
+                    data: getData(label)
+                }, true, { duration: 500 });
             };
 
             const play = (button) => {
@@ -411,9 +462,12 @@ if (!Highcharts._barRaceLabelShimInstalled) {
                 chart.sequenceTimer = setInterval(() => doUpdate(1), 500);
             };
 
-            // (re)bind listeners
+            // Wire events (same pattern you already use)
             if (this._onPlayPause) btn.removeEventListener('click', this._onPlayPause);
-            this._onPlayPause = () => { if (chart.sequenceTimer) pause(btn); else play(btn); };
+            this._onPlayPause = () => {
+                if (chart.sequenceTimer) pause(btn);
+                else play(btn);
+            };
             btn.addEventListener('click', this._onPlayPause);
 
             if (this._onSliderInput) input.removeEventListener('input', this._onSliderInput);
@@ -422,6 +476,7 @@ if (!Highcharts._barRaceLabelShimInstalled) {
 
             input.style.touchAction = 'none';
         }
+
 
         _teardownChart() {
             if (this._isDestroying) return;
