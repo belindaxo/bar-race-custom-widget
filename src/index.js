@@ -171,7 +171,7 @@ if (!Highcharts._barRaceLabelShimInstalled) {
             this._pendingIdx = null;
 
             if (this._chart?.sequenceTimer) {
-                clearInterval(this._chart.sequenceTimer);
+                cancelAnimationFrame(this._chart.sequenceTimer);
                 this._chart.sequenceTimer = undefined;
             }
 
@@ -381,7 +381,7 @@ if (!Highcharts._barRaceLabelShimInstalled) {
                 button.style.fontSize = '18px';
 
                 if (chart.sequenceTimer) {
-                    clearInterval(chart.sequenceTimer);
+                    cancelAnimationFrame(chart.sequenceTimer);
                     chart.sequenceTimer = undefined;
                 }
 
@@ -432,6 +432,8 @@ if (!Highcharts._barRaceLabelShimInstalled) {
             const doUpdate = (increment) => {
                 const minIdx = 0;
                 const maxIdx = timeline.length - 1;
+
+                let idx = parseInt(input.value || '0', 10);
                 if (!Number.isFinite(idx)) idx = minIdx;
                 if (increment) idx += increment;
                 idx = Math.max(minIdx, Math.min(maxIdx, idx));
@@ -479,7 +481,7 @@ if (!Highcharts._barRaceLabelShimInstalled) {
             const input = this.shadowRoot.getElementById('play-range');
 
             if (this._chart?.sequenceTimer) {
-                clearInterval(this._chart.sequenceTimer);
+                cancelAnimationFrame(this._chart.sequenceTimer);
                 this._chart.sequenceTimer = undefined;
             }
 
