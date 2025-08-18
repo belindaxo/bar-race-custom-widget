@@ -155,12 +155,12 @@ if (!Highcharts._barRaceLabelShimInstalled) {
 
             // internal state
             this._chart = null;
-            this._currentYear = undefined;
+            this._currentIndex = undefined;
             this._renderTimer = null;
 
             // RAF batching
             this._raf = 0;
-            this._pendingYear = null;
+            this._pendingIdx = null;
 
             // handlers
             this._onPlayPause = null;
@@ -184,7 +184,7 @@ if (!Highcharts._barRaceLabelShimInstalled) {
 
             // cancel any scheduled rAF update
             if (this._raf) { cancelAnimationFrame(this._raf); this._raf = 0; }
-            this._pendingYear = null;
+            this._pendingIdx = null;
             this._dragging = false;
 
             // pause autoplay first
@@ -248,23 +248,56 @@ if (!Highcharts._barRaceLabelShimInstalled) {
             const structuredData = processSeriesData(data, dimensions, measures);
             console.log('structuredData:', structuredData);
 
-            const labelKeys = Object.keys(structuredData);
-            let years;
-            const numericYears = labelKeys.map(k => Number(k));
-            if (numericYears.every(Number.isFinite)) {
-                years = numericYears.sort((a, b) => a - b);
-            } else {
-                years = labelKeys;
+            const MONTHS = {
+                JAN: 1, FEB: 2, MAR: 3, APR: 4,
+                MAY: 5, JUN: 6, JUL: 7, AUG: 8,
+                SEP: 9, OCT: 10, NOV: 11, DEC: 12
             }
-            if (!years.length) {
+
+            const parseTimeKey = (key) => {
+                if (key == null) return null;
+                const s = String(key).trim();
+
+                // Case 1: YYYY
+                if (/^\d{4}$/.test(s)) {
+                    return { year: parseInt(s, 10), month: 1 };
+                }
+
+                // case 2: MMM YYYY
+                const m = s.match(/^([A-Za-z]{3})\s+(\d{4})$/);
+                if (m) {
+                    const mon = MONTHS[m[1].toUpperCase()];
+                    const yr = parseInt(m[2], 10);
+                    if (mon && Number.isFinite(yr)) {
+                        return { year: yr, month: mon };
+                    }
+                }
+
+                return null;
+            };
+
+            const labels = Object.keys(structuredData);
+            if (!labels.length) {
                 this._teardownChart();
                 return;
             }
 
-            const startYear = years[0];
-            console.log('startYear: ', startYear);
-            const endYear = years[years.length - 1];
-            console.log('endYear: ', endYear);
+            const timeline = labels
+                .map(label => ({ label, ts: parseTimeKey(label) }))
+                .filter(x => x.ts !== null)
+                .sort((a, b) => a.ts.year - b.ts.year || a.ts.month - b.ts.month)
+                .map(x => x.label);
+
+            if (!timeline.length) {
+                this._teardownChart();
+                return;
+            }
+
+            const startLabel = timeline[0];
+            console.log('startLabel:', startLabel);
+            const endLabel = timeline[timeline.length - 1];
+            console.log('endLabel:', endLabel);
+            
             const nbr = 10;
 
             const btn = this.shadowRoot.getElementById('play-pause-button');
@@ -273,42 +306,39 @@ if (!Highcharts._barRaceLabelShimInstalled) {
             if (!containerEl) return; // container detached
 
             // slider bounds
-            const minStr = String(startYear);
-            const maxStr = String(endYear);
-            if (input.min !== minStr) input.min = minStr;
-            if (input.max !== maxStr) input.max = maxStr;
+            const minIdx = 0;
+            const maxIdx = timeline.length - 1;
+            if (input.min !== String(minIdx)) input.min = String(minIdx);
+            if (input.max !== String(maxIdx)) input.max = String(maxIdx);
             input.step = '1';
 
-            // current year with clamping
-            const prev = Number(input.value);
-            if (Number.isFinite(prev)) {
-                this._currentYear = Math.max(Number(startYear), Math.min(Number(endYear), prev));
-                input.value = String(this._currentYear);
+            const prevIdx = Number(input.value);
+            if (Number.isFinite(prevIdx)) {
+                this._currentIndex = Math.max(minIdx, Math.min(maxIdx, prevIdx));
+                input.value = String(this._currentIndex);
             } else {
-                this._currentYear = Number(startYear);
-                input.value = String(startYear);
+                this._currentIndex = 0;
+                input.value = '0';
             }
 
-            const getData = (year) => {
-                const yKey = String(year);
-                const timeData = structuredData?.[yKey] || {};
+            const getData = (label) => {
+                const timeData = structuredData?.[label] || {};
                 return Object.entries(timeData)
                     .map(([category, value]) => [category, Number(value) || 0])
                     .sort((a, b) => b[1] - a[1])
                     .slice(0, nbr);
             };
 
-            const getSubtitle = (year) => {
-                const yKey = String(year);
-                const sum = Object.values(structuredData[yKey] || {}).reduce((s, v) => s + (Number(v) || 0), 0);
+            const getSubtitle = (label) => {
+                const sum = Object.values(structuredData[label] || {}).reduce((s, v) => s + (Number(v) || 0), 0);
                 const total = Highcharts.numberFormat(sum, 0, '.', ',');
                 return `
-          <span style="font-size: 80px">${year}</span>
-          <br>
-          <span style="font-size: 22px">
-          Total: <b>${total}</b>
-          </span>
-        `;
+                <span style="font-size: 80px">${label}</span>
+                <br>
+                <span style="font-size: 22px">
+                    Total: <b>${total}</b>
+                </span>
+                `;
             };
 
             applyHighchartsDefaults();
@@ -318,7 +348,7 @@ if (!Highcharts._barRaceLabelShimInstalled) {
                     chart: { animation: { duration: 500 }, marginRight: 50 },
                     title: { text: 'Chart Title', align: 'left' },
                     subtitle: {
-                        text: getSubtitle(this._currentYear),
+                        text: getSubtitle(this._currentIndex),
                         floating: true, align: 'right', verticalAlign: 'middle',
                         useHTML: true, y: 100, x: -20
                     },
@@ -335,7 +365,7 @@ if (!Highcharts._barRaceLabelShimInstalled) {
                             dataLabels: { enabled: true }
                         }
                     },
-                    series: [{ type: 'bar', name: String(this._currentYear), data: getData(this._currentYear) }],
+                    series: [{ type: 'bar', name: String(this._currentIndex), data: getData(this._currentIndex) }],
                     responsive: {
                         rules: [{
                             condition: { maxWidth: 550 },
@@ -356,8 +386,8 @@ if (!Highcharts._barRaceLabelShimInstalled) {
                 };
                 this._chart = Highcharts.chart(containerEl, chartOptions);
             } else {
-                this._chart.update({ subtitle: { text: getSubtitle(this._currentYear) } }, false, false, false);
-                this._chart.series[0].update({ name: String(this._currentYear), data: getData(this._currentYear) }, true, { duration: 500 });
+                this._chart.update({ subtitle: { text: getSubtitle(this._currentIndex) } }, false, false, false);
+                this._chart.series[0].update({ name: String(this._currentIndex), data: getData(this._currentIndex) }, true, { duration: 500 });
             }
 
             const chart = this._chart;
@@ -376,30 +406,32 @@ if (!Highcharts._barRaceLabelShimInstalled) {
                     input.value = String(parseInt(input.value, 10) + increment);
                 }
 
-                let yr = parseInt(input.value, 10);
-                if (!Number.isFinite(yr)) yr = Number(startYear);
-                yr = Math.max(Number(startYear), Math.min(Number(endYear), yr));
-                input.value = String(yr);
+                let idx = parseInt(input.value, 10);
+                if (!Number.isFinite(idx)) idx = minIdx;
+                idx = Math.max(minIdx, Math.min(maxIdx, idx));
+                input.value = String(idx);
 
-                this._pendingYear = yr;
+                this._currentIdx = idx;
+                const label = timeline[this._currentIdx];
+
                 if (this._raf) return;
 
                 this._raf = requestAnimationFrame(() => {
                     this._raf = 0;
-                    const year = this._pendingYear;
-                    this._pendingYear = null;
+                    const idx = this._pendingIdx;
+                    this._pendingIdx = null;
 
                     if (this._isDestroying || !this._chart) return;
                     const chartNow = this._chart;
 
-                    if (year >= Number(endYear)) {
+                    if (idx >= maxIdx) {
                         pause(btn);
                     }
 
-                    chartNow.update({ subtitle: { text: getSubtitle(year) } }, false, false, false);
-                    chartNow.series[0].update({ name: String(year), data: getData(year) }, true, { duration: 500 });
+                    chartNow.update({ subtitle: { text: getSubtitle(label) } }, false, false, false);
+                    chartNow.series[0].update({ name: String(label), data: getData(label) }, true, { duration: 500 });
 
-                    this._currentYear = year;
+                    this._currentIndex = label;
                 });
             };
 
@@ -429,7 +461,7 @@ if (!Highcharts._barRaceLabelShimInstalled) {
 
             // cancel rAF and reset state
             if (this._raf) { cancelAnimationFrame(this._raf); this._raf = 0; }
-            this._pendingYear = null;
+            this._pendingIdx = null;
             this._dragging = false;
 
             const btn = this.shadowRoot.getElementById('play-pause-button');
