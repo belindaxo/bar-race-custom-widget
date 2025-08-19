@@ -426,7 +426,7 @@ if (!Highcharts._barRaceLabelShimInstalled) {
                 button.style.fontSize = '22px';
                 if (chart.sequenceTimer) clearInterval(chart.sequenceTimer);
                 setPlayingVisuals(true);
-                chart.sequenceTimer = setInterval(() => doUpdate(1), 500);
+                chart.sequenceTimer = setInterval(() => doUpdate(1), 1000);
             };
 
             // wire events
