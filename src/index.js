@@ -4,9 +4,9 @@ import { processSeriesData } from './data/dataProcessor';
 import { applyHighchartsDefaults } from './config/highchartsSetup';
 import { createChartStylesheet } from './config/styles';
 
-/* ------------------------------------------------------------------ */
-/*  Text animation shim (null‑safe, only installed once)               */
-/* ------------------------------------------------------------------ */
+// ------------------------------------
+// DataLabel text animation shim
+// ------------------------------------
 if (!Highcharts._barRaceLabelShimInstalled) {
     (function (H) {
         const FLOAT = /^-?\d+\.?\d*$/;
@@ -37,7 +37,6 @@ if (!Highcharts._barRaceLabelShimInstalled) {
             return this.endText ? this.endText : ct.substring(0, Math.floor(ct.length / 2));
         };
 
-        // Animate only dataLabel text while the sequence is running.
         H.wrap(H.Series.prototype, 'drawDataLabels', function (proceed) {
             const attr = H.SVGElement.prototype.attr;
             const chart = this.chart;
@@ -49,6 +48,7 @@ if (!Highcharts._barRaceLabelShimInstalled) {
                             if (hash && hash.text !== undefined && chart.isResizing === 0) {
                                 const text = hash.text;
                                 delete hash.text;
+                                // animate only the text, keep other attrs synchronous
                                 return this.attr(hash).animate({ text });
                             }
                             return attr.apply(this, arguments);
@@ -66,13 +66,13 @@ if (!Highcharts._barRaceLabelShimInstalled) {
     Highcharts._barRaceLabelShimInstalled = true;
 }
 
-/* ------------------------------------------------------------------ */
-/*  Defensive Highcharts wraps                                         */
-/* ------------------------------------------------------------------ */
+// ------------------------------------
+// Safety patches for HC 12 teardown / pointer
+// ------------------------------------
 (function (H) {
     const wrap = H.wrap;
 
-    // Idempotent destroy across core classes
+    // idempotent destroys (Chart/Series/Axis/Point/SVGElement)
     ['Chart', 'Series', 'Axis', 'Point'].forEach(ctor => {
         if (H[ctor]?.prototype) {
             wrap(H[ctor].prototype, 'destroy', function (proceed) {
@@ -83,7 +83,7 @@ if (!Highcharts._barRaceLabelShimInstalled) {
         }
     });
 
-    // null‑safe erase
+    // null-safe erase
     const origErase = H.erase;
     H.erase = function (arr, item) {
         if (!arr || typeof arr.length !== 'number') return;
@@ -91,14 +91,14 @@ if (!Highcharts._barRaceLabelShimInstalled) {
         if (i > -1) arr.splice(i, 1);
     };
 
-    // Survive races in destroyElements
+    // survive races in destroyElements
     if (H.Chart?.prototype?.destroyElements) {
         wrap(H.Chart.prototype, 'destroyElements', function (proceed) {
             try { proceed.apply(this, Array.prototype.slice.call(arguments, 1)); } catch { }
         });
     }
 
-    // SVGElement safe destroy + translate guard (prevents “reading 'x'”)
+    // make SVGElement.destroy idempotent + safe
     if (H.SVGElement?.prototype) {
         wrap(H.SVGElement.prototype, 'destroy', function (proceed) {
             if (this.___destroyed) return;
@@ -106,6 +106,7 @@ if (!Highcharts._barRaceLabelShimInstalled) {
             try { proceed.apply(this, Array.prototype.slice.call(arguments, 1)); } catch { }
         });
 
+        // guard translate (the 'x' error originates here in some races)
         const tName = 'translate';
         if (H.SVGElement.prototype[tName]) {
             wrap(H.SVGElement.prototype, tName, function (proceed) {
@@ -115,7 +116,7 @@ if (!Highcharts._barRaceLabelShimInstalled) {
         }
     }
 
-    // Pointer.reset safety (prevents “reading 'touched'”)
+    // tooltip/pointer safety – ensure we never depend on undefined event
     if (H.Pointer?.prototype) {
         wrap(H.Pointer.prototype, 'reset', function (proceed, e) {
             try { return proceed.call(this, e || { touched: false }); } catch { }
@@ -123,9 +124,9 @@ if (!Highcharts._barRaceLabelShimInstalled) {
     }
 })(Highcharts);
 
-/* ------------------------------------------------------------------ */
-/*  Component                                                          */
-/* ------------------------------------------------------------------ */
+// ------------------------------------
+// Web component
+// ------------------------------------
 (function () {
     class BarRace extends HTMLElement {
         static get observedAttributes() { return []; }
@@ -135,117 +136,61 @@ if (!Highcharts._barRaceLabelShimInstalled) {
             this.attachShadow({ mode: 'open' });
             this.shadowRoot.adoptedStyleSheets = [createChartStylesheet()];
             this.shadowRoot.innerHTML = `
-        <div id="parent-container">
-          <div id="play-controls">
-            <button id="play-pause-button" title="play"
-              style="margin-left:10px;width:45px;height:45px;cursor:pointer;border:1px solid #004b8d;
-                     border-radius:25px;color:white;background-color:#004b8d;transition:background-color 250ms;font-size:18px;">▶</button>
-            <input id="play-range" type="range"
-                   style="transform: translateY(2.5px); width: calc(100% - 90px); background:#f8f8f8;"/>
-          </div>
-          <div id="container"></div>
-        </div>
-      `;
+            <div id="parent-container">
+                <div id="play-controls">
+                    <button id="play-pause-button" title="play"
+                        style="margin-left:10px;width:45px;height:45px;cursor:pointer;border:1px solid #004b8d;
+                        border-radius:25px;color:white;background-color:#004b8d;transition:background-color 250ms;font-size:18px;">▶</button>
+                    <input id="play-range" type="range" style="transform: translateY(2.5px); width: calc(100% - 90px); background:#f8f8f8;"/>
+                </div>
+                <div id="container"></div>
+            </div>
+            `;
 
             // internal state
             this._chart = null;
             this._currentIdx = 0;
             this._timelineSig = '';
             this._renderTimer = null;
-
-            // animation batching
             this._raf = 0;
             this._pendingIdx = null;
-
-            // scrubbing
-            this._scrubbing = false;
-            this._restoreAnim = null;
 
             // handlers
             this._onPlayPause = null;
             this._onSliderInput = null;
-            this._onSliderDown = null;
-            this._onSliderUp = null;
+
 
             // flags
             this._isDestroying = false;
+            this._dragging = false;
         }
 
-        /* ---------- SAC hooks ---------- */
+        // SAC hooks
         onCustomWidgetResize() { this._scheduleRender(); }
         onCustomWidgetAfterUpdate() { this._scheduleRender(); }
         attributeChangedCallback() { this._scheduleRender(); }
-
-        /* ---------- Scrub helpers ---------- */
-        _startScrub = () => {
-            if (this._scrubbing) return;
-            this._scrubbing = true;
-            const c = this._chart;
-
-            // stop play + RAF
-            if (c?.sequenceTimer) { cancelAnimationFrame?.(c.sequenceTimer); clearInterval?.(c.sequenceTimer); }
-            c.sequenceTimer = undefined;
-            if (this._raf) cancelAnimationFrame(this._raf);
-            this._raf = 0;
-            this._pendingIdx = null;
-
-            // disable animation + hover while scrubbing
-            const currentAnim = c?.options?.plotOptions?.series?.animation;
-            this._restoreAnim = currentAnim;
-            c?.update({
-                tooltip: { enabled: false },
-                plotOptions: { series: { animation: false, states: { hover: { enabled: false } } } }
-            }, false, false, false);
-            // neutralize any hover state before data mutate
-            try { c?.pointer?.reset?.({ touched: false }); } catch { }
-            c?.redraw(false);
-        };
-
-        _endScrub = () => {
-            if (!this._scrubbing) return;
-            this._scrubbing = false;
-            const c = this._chart;
-            c?.update({
-                tooltip: { enabled: true },
-                plotOptions: {
-                    series: {
-                        animation: (this._restoreAnim ?? { duration: 500 }),
-                        states: { hover: { enabled: true } }
-                    }
-                }
-            }, false, false, false);
-            c?.redraw(false);
-        };
 
         onCustomWidgetDestroy() {
             if (this._isDestroying) return;
             this._isDestroying = true;
 
             // stop timers
-            if (this._chart?.sequenceTimer) {
-                cancelAnimationFrame?.(this._chart.sequenceTimer);
-                clearInterval?.(this._chart.sequenceTimer);
-                this._chart.sequenceTimer = undefined;
-            }
             if (this._raf) cancelAnimationFrame(this._raf);
             this._raf = 0;
             this._pendingIdx = null;
+
+            if (this._chart?.sequenceTimer) {
+                clearInterval(this._chart.sequenceTimer);
+                this._chart.sequenceTimer = undefined;
+            }
 
             // detach listeners
             const btn = this.shadowRoot.getElementById('play-pause-button');
             const input = this.shadowRoot.getElementById('play-range');
             if (btn && this._onPlayPause) btn.removeEventListener('click', this._onPlayPause);
             if (input && this._onSliderInput) input.removeEventListener('input', this._onSliderInput);
-            if (input && this._onSliderDown) {
-                input.removeEventListener('mousedown', this._onSliderDown);
-                input.removeEventListener('touchstart', this._onSliderDown);
-            }
-            if (this._onSliderUp) {
-                window.removeEventListener('mouseup', this._onSliderUp);
-                window.removeEventListener('touchend', this._onSliderUp);
-            }
 
-            // neutralize pointer then destroy
+            // best-effort neutralize hover before destroying
             try {
                 if (this._chart) {
                     this._chart.hoverPoints = [];
@@ -260,12 +205,11 @@ if (!Highcharts._barRaceLabelShimInstalled) {
         }
 
         _scheduleRender() {
-            if (this._scrubbing) return; // don’t re-render during slider drag
+            if (this._dragging) return;
             clearTimeout(this._renderTimer);
             this._renderTimer = setTimeout(() => this._renderChart(), 0);
         }
 
-        /* ---------- Main render ---------- */
         _renderChart() {
             const dataBinding = this.dataBinding;
             if (!dataBinding || dataBinding.state !== 'success' || !dataBinding.data?.length) {
@@ -282,31 +226,23 @@ if (!Highcharts._barRaceLabelShimInstalled) {
 
             const structuredData = processSeriesData(data, dimensions, measures);
 
-            // --- build timeline: supports YYYY, MMM YYYY, MM/YYYY ---
+            // --- build timeline (supports "YYYY" and "MMM YYYY" and "YYYY-MM") ---
             const MONTHS = { JAN: 1, FEB: 2, MAR: 3, APR: 4, MAY: 5, JUN: 6, JUL: 7, AUG: 8, SEP: 9, OCT: 10, NOV: 11, DEC: 12 };
             const parseTimeKey = (key) => {
                 if (key == null) return null;
                 const s = String(key).trim();
-
-                // YYYY
                 if (/^\d{4}$/.test(s)) return { y: +s, m: 1, label: s };
-
-                // MMM YYYY
                 let m = s.match(/^([A-Za-z]{3})\s+(\d{4})$/);
                 if (m) {
                     const mon = MONTHS[m[1].toUpperCase()];
                     const yr = parseInt(m[2], 10);
                     if (mon && Number.isFinite(yr)) return { y: yr, m: mon, label: s };
                 }
-
-                // MM/YYYY
-                m = s.match(/^(\d{1,2})\/(\d{4})$/);
+                m = s.match(/^(\d{4})[-\/](\d{1,2})$/);
                 if (m) {
-                    const mon = Math.max(1, Math.min(12, +m[1]));
-                    const yr = +m[2];
+                    const yr = +m[1], mon = Math.max(1, Math.min(12, +m[2]));
                     return { y: yr, m: mon, label: s };
                 }
-
                 return null;
             };
 
@@ -321,7 +257,7 @@ if (!Highcharts._barRaceLabelShimInstalled) {
 
             if (!timeline.length) { this._teardownChart(); return; }
 
-            // reset to first label if timeline changed (fixes “start at last date”)
+            // reset to first label if the timeline changed (fixes "initially at last date")
             const newSig = timeline.join('|');
             const timelineChanged = newSig !== this._timelineSig;
             this._timelineSig = newSig;
@@ -358,10 +294,10 @@ if (!Highcharts._barRaceLabelShimInstalled) {
                 const sum = Object.values(structuredData[label] || {}).reduce((s, v) => s + (Number(v) || 0), 0);
                 const total = Highcharts.numberFormat(sum, 0, '.', ',');
                 return `
-          <span style="font-size:80px">${label}</span>
-          <br>
-          <span style="font-size:22px">Total: <b>${total}</b></span>
-        `;
+                    <span style="font-size:80px">${label}</span>
+                    <br>
+                    <span style="font-size:22px">Total: <b>${total}</b></span>
+                `;
             };
 
             const currentLabel = () => timeline[this._currentIdx];
@@ -387,7 +323,7 @@ if (!Highcharts._barRaceLabelShimInstalled) {
                         dataSorting: { enabled: true, matchByName: true },
                         type: 'bar',
                         dataLabels: { enabled: true },
-                        // hover disabled while we animate/update to avoid pointer races
+                        // disable hover to avoid pointer races while updating
                         states: { hover: { enabled: false } }
                     }
                 },
@@ -423,14 +359,16 @@ if (!Highcharts._barRaceLabelShimInstalled) {
                 this._chart = Highcharts.chart(this.shadowRoot.getElementById('container'), baseChartOptions);
             } else {
                 this._chart.update({ subtitle: { text: getSubtitle(currentLabel()) } }, false, false, false);
-                this._chart.series[0].setData(getData(currentLabel()), false);
-                this._chart.series[0].update({ name: String(currentLabel()) }, false);
-                this._chart.redraw();
+                this._chart.series[0].update({
+                    name: String(currentLabel()),
+                    data: getData(currentLabel())
+                }, true, { duration: 500 });
             }
 
             const chart = this._chart;
 
             const setPlayingVisuals = (playing) => {
+                // turn off tooltip while animating to avoid 'touched' races
                 chart.update({
                     tooltip: { enabled: !playing },
                     plotOptions: { series: { states: { hover: { enabled: !playing } } } }
@@ -442,49 +380,32 @@ if (!Highcharts._barRaceLabelShimInstalled) {
                 button.title = 'play';
                 button.innerText = '▶';
                 button.style.fontSize = '18px';
-
-                if (chart.sequenceTimer) {
-                    cancelAnimationFrame?.(chart.sequenceTimer);
-                    clearInterval?.(chart.sequenceTimer);
-                    chart.sequenceTimer = undefined;
-                }
+                if (chart.sequenceTimer) clearInterval(chart.sequenceTimer);
+                chart.sequenceTimer = undefined;
                 setPlayingVisuals(false);
             };
 
-            /* ---------- Atomic updater ---------- */
             const doUpdateNow = (idx) => {
-                const minIdx = 0, maxIdx = timeline.length - 1;
                 if (!Number.isFinite(idx)) idx = minIdx;
                 idx = Math.max(minIdx, Math.min(maxIdx, idx));
-                if (idx === this._currentIdx && chart?.series?.[0]?.data?.length) return;
-
                 this._currentIdx = idx;
                 input.value = String(idx);
 
-                // reset pointer/hover before mutating (prevents 'touched' path)
-                try { chart.pointer?.reset?.({ touched: false }); } catch { }
+                const label = currentLabel();
 
-                const label = timeline[idx];
-                const atEnd = idx >= maxIdx;
-                const nextData = getData(label);
+                if (idx >= maxIdx) pause(btn);
 
-                // batch: subtitle + data + name → single redraw
                 chart.update({ subtitle: { text: getSubtitle(label) } }, false, false, false);
-                chart.series[0].setData(nextData, false); // no redraw yet
-                chart.series[0].update({ name: String(label) }, false);
-                chart.redraw();
-
-                if (atEnd) pause(btn);
+                chart.series[0].update({
+                    name: String(label),
+                    data: getData(label)
+                }, true, { duration: 500 });
             };
 
-            /* ---------- rAF-batched requestUpdate ---------- */
-            this._pendingIdx = null;
-            if (this._raf) cancelAnimationFrame(this._raf);
-            this._raf = 0;
-
+            // rAF-batched updater (prevents stacked updates during play)
             const requestUpdate = (idx) => {
                 this._pendingIdx = idx;
-                if (this._raf) { cancelAnimationFrame(this._raf); this._raf = 0; }
+                if (this._raf) return;
                 this._raf = requestAnimationFrame(() => {
                     this._raf = 0;
                     const next = this._pendingIdx;
@@ -494,70 +415,32 @@ if (!Highcharts._barRaceLabelShimInstalled) {
             };
 
             const doUpdate = (increment) => {
-                const minIdx = 0, maxIdx = timeline.length - 1;
-                let idx = this._currentIdx;
+                let idx = parseInt(input.value || '0', 10);
+                if (!Number.isFinite(idx)) idx = minIdx;
                 if (increment) idx += increment;
-                idx = Math.max(minIdx, Math.min(maxIdx, idx));
                 requestUpdate(idx);
-            };
-
-            /* ---------- Play via rAF ---------- */
-            const PLAY_STEP_MS = 1000;
-            let playAnchor = 0;
-
-            const tick = (ts) => {
-                if (!chart.sequenceTimer) return;
-                if (!playAnchor) playAnchor = ts;
-                if (ts - playAnchor >= PLAY_STEP_MS) {
-                    playAnchor += PLAY_STEP_MS;
-                    doUpdate(1);
-                }
-                chart.sequenceTimer = requestAnimationFrame(tick);
             };
 
             const play = (button) => {
                 button.title = 'pause';
                 button.innerText = '⏸';
                 button.style.fontSize = '22px';
-
-                if (chart.sequenceTimer) cancelAnimationFrame(chart.sequenceTimer);
+                if (chart.sequenceTimer) clearInterval(chart.sequenceTimer);
                 setPlayingVisuals(true);
-                chart.sequenceTimer = requestAnimationFrame(tick);
+                chart.sequenceTimer = setInterval(() => doUpdate(1), 1000);
             };
 
-            /* ---------- Wire events ---------- */
+            // wire events
             if (this._onPlayPause) btn.removeEventListener('click', this._onPlayPause);
             this._onPlayPause = () => (chart.sequenceTimer ? pause(btn) : play(btn));
             btn.addEventListener('click', this._onPlayPause);
 
             if (this._onSliderInput) input.removeEventListener('input', this._onSliderInput);
-            this._onSliderInput = () => {
-                // Any direct scrub should pause playback and update immediately
-                pause(btn);
-                const v = Number(input.value);
-                if (Number.isFinite(v)) {
-                    const minIdx = 0, maxIdx = timeline.length - 1;
-                    const idx = Math.max(minIdx, Math.min(maxIdx, v));
-                    requestUpdate(idx);
-                }
-            };
-            input.addEventListener('input', this._onSliderInput);
+            this._onSliderInput = () => { setPlayingVisuals(false); doUpdate(0); };
+            input.addEventListener('input', this._onSliderInput)
 
-            if (this._onSliderDown) {
-                input.removeEventListener('mousedown', this._onSliderDown);
-                input.removeEventListener('touchstart', this._onSliderDown);
-            }
-            this._onSliderDown = () => this._startScrub();
-            input.addEventListener('mousedown', this._onSliderDown);
-            input.addEventListener('touchstart', this._onSliderDown, { passive: true });
-
-            if (this._onSliderUp) {
-                window.removeEventListener('mouseup', this._onSliderUp);
-                window.removeEventListener('touchend', this._onSliderUp);
-            }
-            this._onSliderUp = () => this._endScrub();
-            window.addEventListener('mouseup', this._onSliderUp);
-            window.addEventListener('touchend', this._onSliderUp, { passive: true });
+            input.style.touchAction = 'none'; // disable touch events
+            
         }
 
         _teardownChart() {
@@ -568,24 +451,12 @@ if (!Highcharts._barRaceLabelShimInstalled) {
             const input = this.shadowRoot.getElementById('play-range');
 
             if (this._chart?.sequenceTimer) {
-                cancelAnimationFrame?.(this._chart.sequenceTimer);
-                clearInterval?.(this._chart.sequenceTimer);
+                clearInterval(this._chart.sequenceTimer);
                 this._chart.sequenceTimer = undefined;
             }
-            if (this._raf) cancelAnimationFrame(this._raf);
-            this._raf = 0;
-            this._pendingIdx = null;
 
             if (btn && this._onPlayPause) btn.removeEventListener('click', this._onPlayPause);
-            if (input && this._onSliderInput) input.removeEventListener('input', this._onSliderInput);
-            if (input && this._onSliderDown) {
-                input.removeEventListener('mousedown', this._onSliderDown);
-                input.removeEventListener('touchstart', this._onSliderDown);
-            }
-            if (this._onSliderUp) {
-                window.removeEventListener('mouseup', this._onSliderUp);
-                window.removeEventListener('touchend', this._onSliderUp);
-            }
+            if (input && this._onSliderInput) input.removeEventListener('input', this._onSliderInput);  
 
             try {
                 if (this._chart) {
