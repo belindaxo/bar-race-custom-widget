@@ -502,7 +502,7 @@ if (!Highcharts._barRaceLabelShimInstalled) {
             };
 
             /* ---------- Play via rAF ---------- */
-            const PLAY_STEP_MS = 500;
+            const PLAY_STEP_MS = 1000;
             let playAnchor = 0;
 
             const tick = (ts) => {
