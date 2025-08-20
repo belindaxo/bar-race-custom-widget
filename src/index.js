@@ -152,13 +152,20 @@ if (!Highcharts._barRaceLabelShimInstalled) {
             this._currentIdx = 0;
             this._timelineSig = '';
             this._renderTimer = null;
+
+            // animation batching
             this._raf = 0;
             this._pendingIdx = null;
+
+            // scrub mode
+            this._scrubbing = false;
+            this._restoreAnim = null;
 
             // handlers
             this._onPlayPause = null;
             this._onSliderInput = null;
-
+            this._onSliderDown = null;
+            this._onSliderUp = null;
 
             // flags
             this._isDestroying = false;
@@ -170,25 +177,81 @@ if (!Highcharts._barRaceLabelShimInstalled) {
         onCustomWidgetAfterUpdate() { this._scheduleRender(); }
         attributeChangedCallback() { this._scheduleRender(); }
 
+        _startScrub = () => {
+            if (this._scrubbing) return;
+            this._scrubbing = true;
+            const c = this._chart;
+
+            // stop play + RAF
+            if (c?.sequenceTimer) {
+                cancelAnimationFrame?.(c.sequenceTimer);
+                clearInterval?.(c.sequenceTimer);
+            }
+            c.sequenceTimer = undefined;
+            if (this._raf) cancelAnimationFrame(this._raf);
+            this._raf = 0;
+            this._pendingIdx = null;
+
+            // disable animation + hover
+            const currentAnim = c?.options?.plotOptions?.series?.animation;
+            this._restoreAnim = currentAnim;
+            c?.update({
+                tooltip: { enabled: false },
+                plotOptions: {
+                    series: {
+                        animation: false,
+                        states: { hover: { enabled: false } }
+                    }
+                }
+            }, false, false, false);
+            c?.redraw(false);
+        };
+
+        _endScrub = () => {
+            if (!this._scrubbing) return;
+            this._scrubbing = false;
+            const c = this._chart;
+            c?.update({
+                tooltip: { enabled: true },
+                plotOptions: {
+                    series: {
+                        animation: this._restoreAnim ?? { duration: 500 },
+                        states: { hover: { enabled: true } }
+                    }
+                }
+            }, false, false, false);
+            c?.redraw(false);
+        };
+
         onCustomWidgetDestroy() {
             if (this._isDestroying) return;
             this._isDestroying = true;
 
             // stop timers
+            if (this._chart?.sequenceTimer) {
+                cancelAnimationFrame?.(this._chart.sequenceTimer);
+                clearInterval(this._chart.sequenceTimer);
+                this._chart.sequenceTimer = undefined;
+            }
+
             if (this._raf) cancelAnimationFrame(this._raf);
             this._raf = 0;
             this._pendingIdx = null;
 
-            if (this._chart?.sequenceTimer) {
-                clearInterval(this._chart.sequenceTimer);
-                this._chart.sequenceTimer = undefined;
-            }
 
             // detach listeners
             const btn = this.shadowRoot.getElementById('play-pause-button');
             const input = this.shadowRoot.getElementById('play-range');
             if (btn && this._onPlayPause) btn.removeEventListener('click', this._onPlayPause);
             if (input && this._onSliderInput) input.removeEventListener('input', this._onSliderInput);
+            if (input && this._onSliderDown) {
+                input.removeEventListener('mousedown', this._onSliderDown);
+                input.removeEventListener('touchstart', this._onSliderDown);
+            }
+            if (this._onSliderUp) {
+                window.removeEventListener('mouseup', this._onSliderUp);
+                window.removeEventListener('touchend', this._onSliderUp);
+            }
 
             // best-effort neutralize hover before destroying
             try {
@@ -205,7 +268,7 @@ if (!Highcharts._barRaceLabelShimInstalled) {
         }
 
         _scheduleRender() {
-            if (this._dragging) return;
+            if (this._scrubbing) return;
             clearTimeout(this._renderTimer);
             this._renderTimer = setTimeout(() => this._renderChart(), 0);
         }
@@ -238,9 +301,11 @@ if (!Highcharts._barRaceLabelShimInstalled) {
                     const yr = parseInt(m[2], 10);
                     if (mon && Number.isFinite(yr)) return { y: yr, m: mon, label: s };
                 }
-                m = s.match(/^(\d{4})[-\/](\d{1,2})$/);
+                // MM/YYYY
+                m = s.match(/^(\d{1,2})\/(\d{4})$/);
                 if (m) {
-                    const yr = +m[1], mon = Math.max(1, Math.min(12, +m[2]));
+                    const mon = Math.max(1, Math.min(12, +m[1]));
+                    const yr = +m[2];
                     return { y: yr, m: mon, label: s };
                 }
                 return null;
@@ -380,32 +445,47 @@ if (!Highcharts._barRaceLabelShimInstalled) {
                 button.title = 'play';
                 button.innerText = '▶';
                 button.style.fontSize = '18px';
-                if (chart.sequenceTimer) clearInterval(chart.sequenceTimer);
-                chart.sequenceTimer = undefined;
+                if (chart.sequenceTimer) {
+                    cancelAnimationFrame?.(chart.sequenceTimer);
+                    clearInterval(chart.sequenceTimer);
+                    chart.sequenceTimer = undefined;
+
+                }
+
                 setPlayingVisuals(false);
             };
 
             const doUpdateNow = (idx) => {
+                const minIdx = 0, maxIdx = timeline.length - 1;
                 if (!Number.isFinite(idx)) idx = minIdx;
                 idx = Math.max(minIdx, Math.min(maxIdx, idx));
+                if (idx === this._currentIdx && this._chart?.series?.[0]?.data?.length) return;
+
                 this._currentIdx = idx;
                 input.value = String(idx);
 
-                const label = currentLabel();
+                try { chart.pointer?.reset?.({ touched: false }); } catch { }
 
-                if (idx >= maxIdx) pause(btn);
+                const label = timeline[idx];
+                const atEnd = idx >= maxIdx;
+                const nextData = getData(label);
 
                 chart.update({ subtitle: { text: getSubtitle(label) } }, false, false, false);
-                chart.series[0].update({
-                    name: String(label),
-                    data: getData(label)
-                }, true, { duration: 500 });
+                chart.series[0].setData(nextData, false);
+                chart.series[0].update({ name: String(label) }, false);
+                chart.redraw();
+
+                if (atEnd) pause(btn);
             };
+
+            this._pendingIdx = null;
+            if (this._raf) cancelAnimationFrame(this._raf);
+            this._raf = 0;
 
             // rAF-batched updater (prevents stacked updates during play)
             const requestUpdate = (idx) => {
                 this._pendingIdx = idx;
-                if (this._raf) return;
+                if (this._raf) { cancelAnimationFrame(this._raf); this._raf = 0; }
                 this._raf = requestAnimationFrame(() => {
                     this._raf = 0;
                     const next = this._pendingIdx;
@@ -413,11 +493,11 @@ if (!Highcharts._barRaceLabelShimInstalled) {
                     doUpdateNow(next);
                 });
             };
-
             const doUpdate = (increment) => {
-                let idx = parseInt(input.value || '0', 10);
-                if (!Number.isFinite(idx)) idx = minIdx;
+                const minIdx = 0, maxIdx = timeline.length - 1;
+                let idx = this._currentIdx;
                 if (increment) idx += increment;
+                idx = Math.max(minIdx, Math.min(maxIdx, idx));
                 requestUpdate(idx);
             };
 
@@ -425,7 +505,7 @@ if (!Highcharts._barRaceLabelShimInstalled) {
                 button.title = 'pause';
                 button.innerText = '⏸';
                 button.style.fontSize = '22px';
-                if (chart.sequenceTimer) clearInterval(chart.sequenceTimer);
+                if (chart.sequenceTimer) cancelAnimationFrame(chart.sequenceTimer);
                 setPlayingVisuals(true);
                 chart.sequenceTimer = setInterval(() => doUpdate(1), 1000);
             };
@@ -439,8 +519,24 @@ if (!Highcharts._barRaceLabelShimInstalled) {
             this._onSliderInput = () => { setPlayingVisuals(false); doUpdate(0); };
             input.addEventListener('input', this._onSliderInput)
 
+            if (this._onSliderDown) {
+                input.removeEventListener('mousedown', this._onSliderDown);
+                input.removeEventListener('touchstart', this._onSliderDown);
+            }
+            this._onSliderDown = () => this._startScrub();
+            input.addEventListener('mousedown', this._onSliderDown);
+            input.addEventListener('touchstart', this._onSliderDown);
+
+            if (this._onSliderUp) {
+                window.removeEventListener('mouseup', this._onSliderUp);
+                window.removeEventListener('touchend', this._onSliderUp);
+            }
+            this._onSliderUp = () => this._endScrub();
+            window.addEventListener('mouseup', this._onSliderUp);
+            window.addEventListener('touchend', this._onSliderUp);
+
             input.style.touchAction = 'none'; // disable touch events
-            
+
         }
 
         _teardownChart() {
@@ -451,12 +547,25 @@ if (!Highcharts._barRaceLabelShimInstalled) {
             const input = this.shadowRoot.getElementById('play-range');
 
             if (this._chart?.sequenceTimer) {
+                cancelAnimationFrame?.(this._chart.sequenceTimer);
                 clearInterval(this._chart.sequenceTimer);
                 this._chart.sequenceTimer = undefined;
             }
 
+            if (this._raf) cancelAnimationFrame(this._raf);
+            this._raf = 0;
+            this._pendingIdx = null;
+
             if (btn && this._onPlayPause) btn.removeEventListener('click', this._onPlayPause);
-            if (input && this._onSliderInput) input.removeEventListener('input', this._onSliderInput);  
+            if (input && this._onSliderInput) input.removeEventListener('input', this._onSliderInput);
+            if (input && this._onSliderDown) {
+                input.removeEventListener('mousedown', this._onSliderDown);
+                input.removeEventListener('touchstart', this._onSliderDown);
+            }
+            if (this._onSliderUp) {
+                window.removeEventListener('mouseup', this._onSliderUp);
+                window.removeEventListener('touchend', this._onSliderUp);
+            }
 
             try {
                 if (this._chart) {
