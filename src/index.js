@@ -510,7 +510,15 @@ if (!Highcharts._barRaceLabelShimInstalled) {
             btn.addEventListener('click', this._onPlayPause);
 
             if (this._onSliderInput) input.removeEventListener('input', this._onSliderInput);
-            this._onSliderInput = () => { /* while scrubbing we’re paused already */ doUpdate(0); };
+            this._onSliderInput = () => {
+                const v = Number(input.value);
+                // clamp & update to the requested index directly
+                if (Number.isFinite(v)) {
+                    const minIdx = 0, maxIdx = timeline.length - 1;
+                    const idx = Math.max(minIdx, Math.min(maxIdx, v));
+                    requestUpdate(idx);
+                }
+            };
             input.addEventListener('input', this._onSliderInput);
 
             if (this._onSliderDown) {
