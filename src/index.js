@@ -157,7 +157,7 @@ if (!Highcharts._barRaceLabelShimInstalled) {
 
             // handlers
             this._onPlayPause = null;
-            // this._onSliderInput = null;
+            this._onSliderClick = null;
 
 
             // flags
@@ -188,7 +188,7 @@ if (!Highcharts._barRaceLabelShimInstalled) {
             const btn = this.shadowRoot.getElementById('play-pause-button');
             const input = this.shadowRoot.getElementById('play-range');
             if (btn && this._onPlayPause) btn.removeEventListener('click', this._onPlayPause);
-            // if (input && this._onSliderInput) input.removeEventListener('input', this._onSliderInput);
+            if (input && this._onSliderClick) input.removeEventListener('click', this._onSliderClick);
 
             // best-effort neutralize hover before destroying
             try {
@@ -435,9 +435,9 @@ if (!Highcharts._barRaceLabelShimInstalled) {
             this._onPlayPause = () => (chart.sequenceTimer ? pause(btn) : play(btn));
             btn.addEventListener('click', this._onPlayPause);
 
-            // if (this._onSliderInput) input.removeEventListener('input', this._onSliderInput);
-            // this._onSliderInput = () => { setPlayingVisuals(false); doUpdate(0); };
-            // input.addEventListener('input', this._onSliderInput)
+            if (this.onSliderClick) input.removeEventListener('click', this._onSliderClick);
+            this._onSliderClick = () => { setPlayingVisuals(false); doUpdate(0); };
+            input.addEventListener('click', this._onSliderClick);
 
             input.style.touchAction = 'none'; // disable touch events
             
