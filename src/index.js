@@ -294,12 +294,8 @@ if (!Highcharts._barRaceLabelShimInstalled) {
             const getData = (label) => {
                 const timeData = structuredData?.[label] || {};
                 return Object.entries(timeData)
-                    .map(([category, value]) => ({
-                        id: String(category),
-                        name: String(category),
-                        y: Number(value) || 0,
-                    }))
-                    .sort((a, b) => b.y - a.y)
+                    .map(([category, value]) => [category, Number(value) || 0])
+                    .sort((a, b) => b[1] - a[1])
                     .slice(0, nbr);
             };
 
@@ -402,6 +398,7 @@ if (!Highcharts._barRaceLabelShimInstalled) {
                 const minIdx = 0, maxIdx = timeline.length - 1;
                 if (!Number.isFinite(idx)) idx = minIdx;
                 idx = Math.max(minIdx, Math.min(maxIdx, idx));
+
                 if (idx === this._currentIdx && this._chart?.series?.[0]?.data?.length) return;
 
                 this._currentIdx = idx;
@@ -417,8 +414,8 @@ if (!Highcharts._barRaceLabelShimInstalled) {
                     series: [{
                         type: 'bar',
                         name: String(label),
-                        dataSorting: { enabled: true, matchByName: true },
-                        data: nextData
+                        data: nextData,
+                        dataSorting: { enabled: true, matchByName: true }
                     }]
                 }, true, true, false);
 
@@ -426,17 +423,10 @@ if (!Highcharts._barRaceLabelShimInstalled) {
                 
             };
 
-            this._pendingIdx = null;
-            if (this._raf) cancelAnimationFrame(this._raf);
-            this._raf = 0;
-
             // rAF-batched updater (prevents stacked updates during play)
             const requestUpdate = (idx) => {
                 this._pendingIdx = idx;
-                if (this._raf) {
-                    cancelAnimationFrame(this._raf);
-                    this._raf = 0;
-                };
+                if (this._raf) return;
                 this._raf = requestAnimationFrame(() => {
                     this._raf = 0;
                     const next = this._pendingIdx;
@@ -446,11 +436,9 @@ if (!Highcharts._barRaceLabelShimInstalled) {
             };
 
             const doUpdate = (increment) => {
-                const minIdx = 0, maxIdx = timeline.length - 1;
-                let idx = this._currentIdx;
+                let idx = parseInt(input.value || '0', 10);
                 if (!Number.isFinite(idx)) idx = minIdx;
                 if (increment) idx += increment;
-                idx = Math.max(minIdx, Math.min(maxIdx, idx));
                 requestUpdate(idx);
             };
 
