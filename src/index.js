@@ -231,18 +231,27 @@ if (!Highcharts._barRaceLabelShimInstalled) {
             const parseTimeKey = (key) => {
                 if (key == null) return null;
                 const s = String(key).trim();
+
+                // Case 1: YYYY (e.g., "2023")
                 if (/^\d{4}$/.test(s)) return { y: +s, m: 1, label: s };
+
+                // Case 2: MMM YYYY (e.g., "JAN 2023")
                 let m = s.match(/^([A-Za-z]{3})\s+(\d{4})$/);
                 if (m) {
                     const mon = MONTHS[m[1].toUpperCase()];
                     const yr = parseInt(m[2], 10);
                     if (mon && Number.isFinite(yr)) return { y: yr, m: mon, label: s };
                 }
-                m = s.match(/^(\d{4})[-\/](\d{1,2})$/);
+
+                // Case 3: MM/YYYY (e.g., "01/2023")
+                m = s.match(/^(\d{2})\/(\d{4})$/);
                 if (m) {
-                    const yr = +m[1], mon = Math.max(1, Math.min(12, +m[2]));
+                    const mon = Math.max(1, Math.min(12, +m[1]));
+                    const yr = +m[2]; 
                     return { y: yr, m: mon, label: s };
                 }
+
+                
                 return null;
             };
 
