@@ -395,20 +395,32 @@ if (!Highcharts._barRaceLabelShimInstalled) {
             };
 
             const doUpdateNow = (idx) => {
+                const minIdx = 0, maxIdx = timeline.length - 1;
                 if (!Number.isFinite(idx)) idx = minIdx;
                 idx = Math.max(minIdx, Math.min(maxIdx, idx));
+
+                if (idx === this._currentIdx && this._chart?.series?.[0]?.data?.length) return;
+
                 this._currentIdx = idx;
                 input.value = String(idx);
 
-                const label = currentLabel();
+                try { chart.pointer?.reset?.({ touched: false }); } catch { }
+
+                const label = timeline[idx];
+                const nextData = getData(label);
+
+                chart.update({
+                    subtitle: { text: getSubtitle(label) },
+                    series: [{
+                        type: 'bar',
+                        name: String(label),
+                        data: nextData,
+                        dataSorting: { enabled: true, matchByName: true }
+                    }]
+                }, true, true, false);
 
                 if (idx >= maxIdx) pause(btn);
-
-                chart.update({ subtitle: { text: getSubtitle(label) } }, false, false, false);
-                chart.series[0].update({
-                    name: String(label),
-                    data: getData(label)
-                }, true, { duration: 500 });
+                
             };
 
             // rAF-batched updater (prevents stacked updates during play)
@@ -445,11 +457,19 @@ if (!Highcharts._barRaceLabelShimInstalled) {
             btn.addEventListener('click', this._onPlayPause);
 
             if (this._onSliderClick) input.removeEventListener('click', this._onSliderClick);
-            this._onSliderClick = () => { setPlayingVisuals(false); doUpdate(0); };
+            this._onSliderClick = () => { 
+                pause(btn);
+
+                requestAnimationFrame(() => {
+                    const v = Number(input.value);
+                    if (!Number.isFinite(v)) return;
+                    const idx = Math.max(0, Math.min(timeline.length - 1, v));
+                    requestUpdate(idx);
+                });
+            };
             input.addEventListener('click', this._onSliderClick);
 
             input.style.touchAction = 'none'; // disable touch events
-            
         }
 
         _teardownChart() {
