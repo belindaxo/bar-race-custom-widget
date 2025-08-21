@@ -435,7 +435,7 @@ if (!Highcharts._barRaceLabelShimInstalled) {
             this._onPlayPause = () => (chart.sequenceTimer ? pause(btn) : play(btn));
             btn.addEventListener('click', this._onPlayPause);
 
-            if (this.onSliderClick) input.removeEventListener('click', this._onSliderClick);
+            if (this._onSliderClick) input.removeEventListener('click', this._onSliderClick);
             this._onSliderClick = () => { setPlayingVisuals(false); doUpdate(0); };
             input.addEventListener('click', this._onSliderClick);
 
@@ -456,7 +456,7 @@ if (!Highcharts._barRaceLabelShimInstalled) {
             }
 
             if (btn && this._onPlayPause) btn.removeEventListener('click', this._onPlayPause);
-            // if (input && this._onSliderInput) input.removeEventListener('input', this._onSliderInput);  
+            if (input && this._onSliderClick) input.removeEventListener('click', this._onSliderClick);
 
             try {
                 if (this._chart) {
