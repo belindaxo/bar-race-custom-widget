@@ -3,66 +3,7 @@ import { parseMetadata } from './data/metadataParser';
 import { processSeriesData } from './data/dataProcessor';
 import { applyHighchartsDefaults } from './config/highchartsSetup';
 import { createChartStylesheet } from './config/styles';
-
-// Install the data label text animation shim
-// if (!Highcharts._barRaceLabelShimInstalled) {
-//     (function (H) {
-//         const FLOAT = /^-?\d+\.?\d*$/;
-
-//         H.Fx.prototype.textSetter = function () {
-//             const chart = H.charts[this.elem.renderer.chartIndex];
-
-//             let thousandsSep = chart.numberFormatter('1000.0')[1];
-//             if (/[0-9]/.test(thousandsSep)) {
-//                 thousandsSep = ' ';
-//             }
-//             const replaceRegEx = new RegExp(thousandsSep, 'g');
-
-//             let startValue = (this.start ?? '').toString().replace(replaceRegEx, '');
-//             let endValue = (this.end ?? '').toString().replace(replaceRegEx, '');
-//             let currentValue = endValue;
-
-//             if (FLOAT.test(startValue) && FLOAT.test(endValue)) {
-//                 const s = parseFloat(startValue);
-//                 const e = parseFloat(endValue);
-//                 currentValue = chart.numberFormatter(Math.round(s + (e - s) * this.pos), 0);
-//             }
-//             this.elem.endText = this.end;
-//             this.elem.attr(this.prop, currentValue, null, true);
-//         };
-
-//         H.SVGElement.prototype.textGetter = function () {
-//             const ct = this.text.element.textContent || '';
-//             return this.endText ? this.endText : ct.substring(0, Math.floor(ct.length / 2));
-//         };
-
-//         H.wrap(H.Series.prototype, 'drawDataLabels', function (proceed) {
-//             const attr = H.SVGElement.prototype.attr;
-//             const chart = this.chart;
-
-//             if (chart.sequenceTimer) {
-//                 this.points.forEach(point =>
-//                     (point.dataLabels || []).forEach(label => {
-//                         label.attr = function (hash) {
-//                             if (hash && hash.text !== undefined && chart.isResizing === 0) {
-//                                 const text = hash.text;
-//                                 delete hash.text;
-//                                 return this.attr(hash).animate({ text });
-//                             }
-//                             return attr.apply(this, arguments);
-//                         };
-//                     })
-//                 );
-//             }
-
-//             const ret = proceed.apply(this, Array.prototype.slice.call(arguments, 1));
-//             this.points.forEach(p => (p.dataLabels || []).forEach(d => (d.attr = attr)));
-//             return ret;
-//         });
-//     })(Highcharts);
-
-//     Highcharts._barRaceLabelShimInstalled = true;
-// }
+import { min } from 'd3';
 
 /* ---------- SAFETY PATCHES: HC teardown hardening (idempotent destroy + null-safe erase) ---------- */
 (function (H) {
@@ -143,24 +84,24 @@ import { createChartStylesheet } from './config/styles';
 
             this.shadowRoot.adoptedStyleSheets = [createChartStylesheet()];
             this.shadowRoot.innerHTML = `
-        <div id="parent-container">
-          <div id="play-controls">
-            <button id="play-pause-button" title="play" style="margin-left: 10px; width: 45px; height: 45px; cursor: pointer; border: 1px solid #004b8d;
-              border-radius: 25px; color: white; background-color: #004b8d; transition: background-color 250ms; font-size: 18px;">▶</button>
-            <input id="play-range" type="range" style="transform: translateY(2.5px); width: calc(100% - 90px); background: #f8f8f8;"/>
-          </div>
-          <div id="container"></div>
-        </div>
-      `;
+                <div id="parent-container">
+                <div id="play-controls">
+                    <button id="play-pause-button" title="play" style="margin-left: 10px; width: 45px; height: 45px; cursor: pointer; border: 1px solid #004b8d;
+                    border-radius: 25px; color: white; background-color: #004b8d; transition: background-color 250ms; font-size: 18px;">▶</button>
+                    <input id="play-range" type="range" style="transform: translateY(2.5px); width: calc(100% - 90px); background: #f8f8f8;"/>
+                </div>
+                <div id="container"></div>
+                </div>
+            `;
 
             // internal state
             this._chart = null;
-            this._currentYear = undefined;
+            this._currentIdx = 0;
             this._renderTimer = null;
 
             // RAF batching
             this._raf = 0;
-            this._pendingYear = null;
+            this._pendingIdx = null;
 
             // handlers
             this._onPlayPause = null;
@@ -184,7 +125,7 @@ import { createChartStylesheet } from './config/styles';
 
             // cancel any scheduled rAF update
             if (this._raf) { cancelAnimationFrame(this._raf); this._raf = 0; }
-            this._pendingYear = null;
+            this._pendingIdx = null;
             this._dragging = false;
 
             // pause autoplay first
@@ -248,24 +189,47 @@ import { createChartStylesheet } from './config/styles';
             const structuredData = processSeriesData(data, dimensions, measures);
             console.log('structuredData:', structuredData);
 
-            const labelKeys = Object.keys(structuredData);
-            let years;
-            const numericYears = labelKeys.map(k => Number(k));
-            if (numericYears.every(Number.isFinite)) {
-                years = numericYears.sort((a, b) => a - b);
-            } else {
-                years = labelKeys;
-            }
-            if (!years.length) {
-                this._teardownChart();
-                return;
+            const MONTHS = { 
+                JAN: 1, FEB: 2, MAR: 3, APR: 4, MAY: 5, JUN: 6, 
+                JUL: 7, AUG: 8, SEP: 9, OCT: 10, NOV: 11, DEC: 12 
+            };
+
+            const parseTimeKey = (key) => {
+                if (key == null) return null;
+                const s = String(key).trim();
+
+                // YYYY
+                if (/^\d{4}$/.test(s)) return { y: +s, m: 1, label: s };
+
+                // MMM YYYY
+                let m = s.match(/^([A-Za-z]{3})\s+(\d{4})$/);
+                if (m) {
+                    const mon = MONTHS[m[1].toUpperCase()];
+                    const yr = +m[2];
+                    if (mon && Number.isFinite(yr)) return { y: yr, m: mon, label: s };
+                }
+
+                // MM/YYYY
+                m = s.match(/^(\d{2})\/(\d{4})$/);
+                if (m) {
+                    const mon = Math.max(1, Math.min(12, +m[1]));
+                    const yr = +m[2];
+                    return { y: yr, m: mon, label: s };
+                }
+
+                return null;
             }
 
-            const startYear = years[0];
-            console.log('startYear: ', startYear);
-            const endYear = years[years.length - 1];
-            console.log('endYear: ', endYear);
-            const nbr = 10;
+            const labels = Object.keys(structuredData);
+            if (!labels.length) { this._teardownChart(); return; }
+
+            const timeline = labels
+                .map(lbl => ({ lbl, ts: parseTimeKey(lbl) }))
+                .filter(x => x.ts) // keep only parseable keys
+                .sort((a,b) => (a.ts.y - b.ts.y) || (a.ts.m - b.ts.m))
+                .map(x => x.lbl);
+            
+            if (!timeline.length) { this._teardownChart(); return; }
 
             const btn = this.shadowRoot.getElementById('play-pause-button');
             const input = this.shadowRoot.getElementById('play-range');
@@ -273,43 +237,45 @@ import { createChartStylesheet } from './config/styles';
             if (!containerEl) return; // container detached
 
             // slider bounds
-            const minStr = String(startYear);
-            const maxStr = String(endYear);
-            if (input.min !== minStr) input.min = minStr;
-            if (input.max !== maxStr) input.max = maxStr;
+            const minIdx = 0;
+            const maxIdx = timeline.length - 1;
+            if (input.min !== String(minIdx)) input.min = String(minIdx);
+            if (input.max !== String(maxIdx)) input.max = String(maxIdx);
             input.step = '1';
 
-            // current year with clamping
-            const prev = Number(input.value);
-            if (Number.isFinite(prev)) {
-                this._currentYear = Math.max(Number(startYear), Math.min(Number(endYear), prev));
-                input.value = String(this._currentYear);
+            // clamp current index
+            const prevIdx = Number(input.value);
+            if (Number.isFinite(prevIdx)) {
+                this._currentIdx = Math.max(minIdx, Math.min(maxIdx, prevIdx));
+                input.value = String(this._currentIdx);
             } else {
-                this._currentYear = Number(startYear);
-                input.value = String(startYear);
+                this._currentIdx = 0;
+                input.value = '0';
             }
 
-            const getData = (year) => {
-                const yKey = String(year);
-                const timeData = structuredData?.[yKey] || {};
+            const nbr = 10;
+
+            const getData = (label) => {
+                const timeData = structuredData?.[label] || {};
                 return Object.entries(timeData)
                     .map(([category, value]) => [category, Number(value) || 0])
                     .sort((a, b) => b[1] - a[1])
                     .slice(0, nbr);
             };
 
-            const getSubtitle = (year) => {
-                const yKey = String(year);
-                const sum = Object.values(structuredData[yKey] || {}).reduce((s, v) => s + (Number(v) || 0), 0);
+            const getSubtitle = (label) => {
+                const sum = Object.values(structuredData[label] || {}).reduce((s, v) => s + (Number(v) || 0), 0);
                 const total = Highcharts.numberFormat(sum, 0, '.', ',');
                 return `
-          <span style="font-size: 80px">${year}</span>
-          <br>
-          <span style="font-size: 22px">
-          Total: <b>${total}</b>
-          </span>
-        `;
+                    <span style="font-size: 80px">${label}</span>
+                    <br>
+                    <span style="font-size: 22px">
+                        Total: <b>${total}</b>
+                    </span>
+                `;
             };
+
+            const currentLabel = () => timeline[this._currentIdx];
 
             applyHighchartsDefaults();
 
@@ -318,7 +284,7 @@ import { createChartStylesheet } from './config/styles';
                     chart: { animation: { duration: 500 }, marginRight: 50 },
                     title: { text: 'Chart Title', align: 'left' },
                     subtitle: {
-                        text: getSubtitle(this._currentYear),
+                        text: getSubtitle(currentLabel()),
                         floating: true, align: 'right', verticalAlign: 'middle',
                         useHTML: true, y: 100, x: -20
                     },
@@ -335,7 +301,7 @@ import { createChartStylesheet } from './config/styles';
                             dataLabels: { enabled: true }
                         }
                     },
-                    series: [{ type: 'bar', name: String(this._currentYear), data: getData(this._currentYear) }],
+                    series: [{ type: 'bar', name: String(currentLabel()), data: getData(currentLabel()) }],
                     responsive: {
                         rules: [{
                             condition: { maxWidth: 550 },
@@ -356,8 +322,8 @@ import { createChartStylesheet } from './config/styles';
                 };
                 this._chart = Highcharts.chart(containerEl, chartOptions);
             } else {
-                this._chart.update({ subtitle: { text: getSubtitle(this._currentYear) } }, false, false, false);
-                this._chart.series[0].update({ name: String(this._currentYear), data: getData(this._currentYear) }, true, { duration: 500 });
+                this._chart.update({ subtitle: { text: getSubtitle(currentLabel()) } }, false, false, false);
+                this._chart.series[0].update({ name: String(currentLabel()), data: getData(currentLabel()) }, true, { duration: 500 });
             }
 
             const chart = this._chart;
@@ -376,30 +342,31 @@ import { createChartStylesheet } from './config/styles';
                     input.value = String(parseInt(input.value, 10) + increment);
                 }
 
-                let yr = parseInt(input.value, 10);
-                if (!Number.isFinite(yr)) yr = Number(startYear);
-                yr = Math.max(Number(startYear), Math.min(Number(endYear), yr));
-                input.value = String(yr);
+                let idx = parseInt(input.value, 10);
+                if (!Number.isFinite(idx)) idx = minIdx;
+                idx = Math.max(minIdx, Math.min(maxIdx, idx));
+                input.value = String(idx);
 
-                this._pendingYear = yr;
+                this._pendingIdx = idx;
                 if (this._raf) return;
 
                 this._raf = requestAnimationFrame(() => {
                     this._raf = 0;
-                    const year = this._pendingYear;
-                    this._pendingYear = null;
+                    const nextIdx = this._pendingIdx;
+                    this._pendingIdx = null;
 
                     if (this._isDestroying || !this._chart) return;
                     const chartNow = this._chart;
+                    const label = timeline[nextIdx];
 
-                    if (year >= Number(endYear)) {
+                    if (nextIdx >= maxIdx) {
                         pause(btn);
                     }
 
-                    chartNow.update({ subtitle: { text: getSubtitle(year) } }, false, false, false);
-                    chartNow.series[0].update({ name: String(year), data: getData(year) }, true, { duration: 500 });
+                    chartNow.update({ subtitle: { text: getSubtitle(label) } }, false, false, false);
+                    chartNow.series[0].update({ name: String(label), data: getData(label) }, true, { duration: 500 });
 
-                    this._currentYear = year;
+                    this._currentIdx = nextIdx;
                 });
             };
 
@@ -429,7 +396,7 @@ import { createChartStylesheet } from './config/styles';
 
             // cancel rAF and reset state
             if (this._raf) { cancelAnimationFrame(this._raf); this._raf = 0; }
-            this._pendingYear = null;
+            this._pendingIdx = null;
             this._dragging = false;
 
             const btn = this.shadowRoot.getElementById('play-pause-button');
