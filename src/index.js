@@ -3,7 +3,6 @@ import { parseMetadata } from './data/metadataParser';
 import { processSeriesData } from './data/dataProcessor';
 import { applyHighchartsDefaults } from './config/highchartsSetup';
 import { createChartStylesheet } from './config/styles';
-import { min } from 'd3';
 
 /* ---------- SAFETY PATCHES: HC teardown hardening (idempotent destroy + null-safe erase) ---------- */
 (function (H) {
@@ -110,6 +109,9 @@ import { min } from 'd3';
             // flags
             this._isDestroying = false;
             this._dragging = false;
+
+            // timeline signature
+            this._timelineSig = '';
         }
 
         onCustomWidgetResize() {
@@ -242,6 +244,20 @@ import { min } from 'd3';
             if (input.min !== String(minIdx)) input.min = String(minIdx);
             if (input.max !== String(maxIdx)) input.max = String(maxIdx);
             input.step = '1';
+
+            const firstRender = !this._chart;
+            const newSig = timeline.join('|');
+            const timelineChanged = newSig !== this._timelineSig;
+            this._timelineSig = newSig;
+
+            if (firstRender || timelineChanged) {
+                this._currentIdx = 0;
+                input.value = '0';
+            } else {
+                const prev = Number(input.value);
+                this._currentIdx = Number.isFinite(prev) ? Math.max(minIdx, Math.min(maxIdx, prev)) : 0;
+                input.value = String(this._currentIdx);
+            }
 
             // clamp current index
             const prevIdx = Number(input.value);
