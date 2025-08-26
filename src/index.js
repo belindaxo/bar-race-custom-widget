@@ -297,7 +297,7 @@ import { createChartStylesheet } from './config/styles';
 
             if (!this._chart) {
                 const chartOptions = {
-                    chart: { animation: { duration: 500 }, marginRight: 50 },
+                    chart: { animation: { duration: 1000 }, marginRight: 50 },
                     title: { text: 'Chart Title', align: 'left' },
                     subtitle: {
                         text: getSubtitle(currentLabel()),
