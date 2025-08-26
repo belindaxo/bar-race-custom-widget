@@ -140,7 +140,7 @@ import { min } from 'd3';
             const btn = this.shadowRoot.getElementById('play-pause-button');
             const input = this.shadowRoot.getElementById('play-range');
             if (btn && this._onPlayPause) btn.removeEventListener('click', this._onPlayPause);
-            if (input && this._onSliderInput) input.removeEventListener('input', this._onSliderInput);
+            if (input && this._onSliderInput) input.removeEventListener('change', this._onSliderInput);
 
             // neutralize hover state before destroy
             try {
@@ -405,9 +405,9 @@ import { min } from 'd3';
             this._onPlayPause = () => { if (chart.sequenceTimer) pause(btn); else play(btn); };
             btn.addEventListener('click', this._onPlayPause);
 
-            if (this._onSliderInput) input.removeEventListener('input', this._onSliderInput);
+            if (this._onSliderInput) input.removeEventListener('change', this._onSliderInput);
             this._onSliderInput = () => doUpdate(0);
-            input.addEventListener('input', this._onSliderInput);
+            input.addEventListener('change', this._onSliderInput);
 
             input.style.touchAction = 'none';
         }
@@ -431,7 +431,7 @@ import { min } from 'd3';
             try { Highcharts.stop && Highcharts.stop(this._chart); } catch { }
 
             if (btn && this._onPlayPause) btn.removeEventListener('click', this._onPlayPause);
-            if (input && this._onSliderInput) input.removeEventListener('input', this._onSliderInput);
+            if (input && this._onSliderInput) input.removeEventListener('change', this._onSliderInput);
 
             // neutralize hover state then destroy
             try {
