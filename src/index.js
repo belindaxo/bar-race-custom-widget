@@ -413,7 +413,7 @@ import { createChartStylesheet } from './config/styles';
                 button.innerText = '⏸';
                 button.style.fontSize = '22px';
                 if (chart.sequenceTimer) clearInterval(chart.sequenceTimer);
-                chart.sequenceTimer = setInterval(() => doUpdate(1), 500);
+                chart.sequenceTimer = setInterval(() => doUpdate(1), 1000);
             };
 
             // (re)bind listeners
