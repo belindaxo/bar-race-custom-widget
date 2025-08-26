@@ -3,6 +3,7 @@ import { parseMetadata } from './data/metadataParser';
 import { processSeriesData } from './data/dataProcessor';
 import { applyHighchartsDefaults } from './config/highchartsSetup';
 import { createChartStylesheet } from './config/styles';
+import { updateTitle } from './config/chartUtils';
 
 /* ---------- SAFETY PATCHES: HC teardown hardening (idempotent destroy + null-safe erase) ---------- */
 (function (H) {
@@ -114,10 +115,20 @@ import { createChartStylesheet } from './config/styles';
             this._timelineSig = '';
         }
 
-        onCustomWidgetResize() {
+        /**
+         * Called when the widget is resized.
+         * @param {number} width - New width of the widget.
+         * @param {number} height - New height of the widget.
+         */
+        onCustomWidgetResize(width, height) {
             this._scheduleRender();
         }
-        onCustomWidgetAfterUpdate() {
+
+        /**
+         * Called after widget properties are updated.
+         * @param {Object} changedProperties - Object containing changed attributes.
+         */
+        onCustomWidgetAfterUpdate(changedProperties) {
             this._scheduleRender();
         }
 
@@ -162,6 +173,16 @@ import { createChartStylesheet } from './config/styles';
             if (this._dragging) return;
             clearTimeout(this._renderTimer);
             this._renderTimer = setTimeout(() => this._renderChart(), 0);
+        }
+
+        /**
+         * Specifies which attributes should trigger re-rendering on change.
+         * @returns {string[]} An array of observed attribute names.
+         */
+        static get observedAttributes() {
+            return [
+                'chartTitle', 'titleSize', 'titleFontStyle', 'titleAlignment', 'titleColor'                // Title properties
+            ];
         }
 
         attributeChangedCallback(name, oldValue, newValue) {
@@ -315,29 +336,76 @@ import { createChartStylesheet } from './config/styles';
 
             applyHighchartsDefaults();
 
+            const seriesName = measures[0]?.label || 'Value';
+            const dimDescription = dimensions[0]?.description || 'Category';
+            const autoTitle = `${seriesName} per ${dimDescription}`;
+            const titleText = updateTitle(autoTitle, this.chartTitle);
+        
+
             if (!this._chart) {
                 const chartOptions = {
-                    chart: { animation: { duration: 500 }, marginRight: 50 },
-                    title: { text: 'Chart Title', align: 'left' },
-                    subtitle: {
-                        text: getSubtitle(currentLabel()),
-                        floating: true, align: 'right', verticalAlign: 'middle',
-                        useHTML: true, y: 100, x: -20
+                    chart: { 
+                        animation: { 
+                            duration: 500 
+                        }, 
+                        marginRight: 50 
                     },
-                    credits: { enabled: false },
-                    legend: { enabled: false },
-                    xAxis: { type: 'category' },
-                    yAxis: { opposite: true, tickPixelInterval: 150, title: { text: null } },
-                    plotOptions: {
-                        series: {
-                            animation: false, groupPadding: 0, pointPadding: 0.1, borderWidth: 0,
-                            colorByPoint: true,
-                            dataSorting: { enabled: true, matchByName: true },
-                            type: 'bar',
-                            dataLabels: { enabled: true }
+                    title: { 
+                        text: titleText, 
+                        align: this.titleAlignment || 'left',
+                        style: { 
+                            fontSize: this.titleSize || '16px', 
+                            fontWeight: this.titleFontStyle || 'bold', 
+                            color: this.titleColor || '#004b8d' 
                         }
                     },
-                    series: [{ type: 'bar', name: String(currentLabel()), data: getData(currentLabel()) }],
+                    subtitle: {
+                        text: getSubtitle(currentLabel()),
+                        floating: true, 
+                        align: 'right', 
+                        verticalAlign: 'middle',
+                        useHTML: true, 
+                        y: 100, 
+                        x: -20
+                    },
+                    credits: { 
+                        enabled: false 
+                    },
+                    legend: { 
+                        enabled: false 
+                    },
+                    xAxis: { 
+                        type: 'category' 
+                    },
+                    yAxis: { 
+                        opposite: true, 
+                        tickPixelInterval: 150, 
+                        title: { 
+                            text: null 
+                        } 
+                    },
+                    plotOptions: {
+                        series: {
+                            animation: false, 
+                            groupPadding: 0, 
+                            pointPadding: 0.1, 
+                            borderWidth: 0,
+                            colorByPoint: true,
+                            dataSorting: { 
+                                enabled: true, 
+                                matchByName: true 
+                            },
+                            type: 'bar',
+                            dataLabels: { 
+                                enabled: true 
+                            }
+                        }
+                    },
+                    series: [{ 
+                        type: 'bar', 
+                        name: String(currentLabel()), 
+                        data: getData(currentLabel()) 
+                    }],
                     responsive: {
                         rules: [{
                             condition: { maxWidth: 550 },
@@ -456,7 +524,6 @@ import { createChartStylesheet } from './config/styles';
 
                 chart.redraw();
 
-                
                 button.title = 'pause';
                 button.innerText = '⏸';
                 button.style.fontSize = '22px';

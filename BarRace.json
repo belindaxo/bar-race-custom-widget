@@ -14,6 +14,13 @@
             "url": "https://belindaxo.github.io/bar-race-custom-widget/dist/bundle.js",
             "integrity": "sha256-",
             "ignoreIntegrity": true
+        },
+        {
+            "kind": "styling",
+            "tag": "com-sap-sample-bar-race-aps",
+            "url": "https://belindaxo.github.io/bar-race-custom-widget/dist/bundle.js",
+            "integrity": "sha256-",
+            "ignoreIntegrity": true
         }
     ],
     "properties": {
@@ -24,6 +31,31 @@
         "height": {
             "type": "integer",
             "default": 400
+        },
+        "chartTitle": {
+            "type": "string",
+            "description": "The title of the chart",
+            "default": ""
+        },
+        "titleSize": {
+            "type": "string",
+            "description": "The font size of the title text",
+            "default": "16px"
+        },
+        "titleFontStyle": {
+            "type": "string",
+            "description": "The font style of the title text",
+            "default": "bold"
+        },
+        "titleAlignment": {
+            "type": "string",
+            "description": "The alignment of the title text",
+            "default": "left"
+        },
+        "titleColor": {
+            "type": "string",
+            "description": "The color of the title text",
+            "default": "#004B8D"
         }
     },
     "methods": {
