@@ -219,6 +219,26 @@ import { createChartStylesheet } from './config/styles';
                     return { y: yr, m: mon, label: s };
                 }
 
+                // QQ YYYY
+                m = s.match(/^([Qq][1-4])\s+(\d{4})$/);
+                if (m) {
+                    const q = parseInt(m[1].replace(/[^0-9]/g, ''), 10);
+                    const yr = +m[2];
+                    if (q >= 1 && q <= 4 && Number.isFinite(yr)) {
+                        return { y: yr, m: (q - 1) * 3 + 1, label: s };
+                    }
+                }
+
+                // Q/YYYY
+                m = s.match(/^([1-4])\/(\d{4})$/);
+                if (m) {
+                    const q = +m[1];
+                    const yr = +m[2];
+                    if (q >= 1 && q <= 4 && Number.isFinite(yr)) {
+                        return { y: yr, m: (q - 1) * 3 + 1, label: s };
+                    }
+                }
+
                 return null;
             }
 
