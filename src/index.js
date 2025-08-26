@@ -429,6 +429,34 @@ import { createChartStylesheet } from './config/styles';
             };
 
             const play = (button) => {
+                const atEnd = this._currentIdx >= maxIdx;
+
+                if (atEnd) {
+                    input.value = 0;
+                    this._currentIdx = 0;
+                }
+
+                const label0 = timeline[0];
+                const nextData0 = getData(label0);
+
+                try {
+                    chart.hoverPoints = [];
+                    chart.hoverPoint = null;
+                    chart.pointer?.reset?.({ touched: false });
+                    chart.tooltip?.hide?.(0);
+                } catch { }
+
+                chart.update({ subtitle: { text: getSubtitle(label0) } }, false, false, false);
+                const s0 = chart.series && chart.series[0];
+                if (s0) {
+                    s0.update({ dataSorting: { enabled: true, matchByName: true } }, false, false);
+                    s0.setData(nextData0, false, false, false);
+                    s0.update({ name: String(label0) }, false, false);
+                }
+
+                chart.redraw();
+
+                
                 button.title = 'pause';
                 button.innerText = '⏸';
                 button.style.fontSize = '22px';
