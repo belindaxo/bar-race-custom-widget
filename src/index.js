@@ -4,7 +4,7 @@ import { processSeriesData } from './data/dataProcessor';
 import { applyHighchartsDefaults } from './config/highchartsSetup';
 import { createChartStylesheet } from './config/styles';
 
-// // Install the data label text animation shim
+// Install the data label text animation shim
 // if (!Highcharts._barRaceLabelShimInstalled) {
 //     (function (H) {
 //         const FLOAT = /^-?\d+\.?\d*$/;
