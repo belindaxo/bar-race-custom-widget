@@ -212,9 +212,9 @@ import { updateTitle } from './config/chartUtils';
             const structuredData = processSeriesData(data, dimensions, measures);
             console.log('structuredData:', structuredData);
 
-            const MONTHS = { 
-                JAN: 1, FEB: 2, MAR: 3, APR: 4, MAY: 5, JUN: 6, 
-                JUL: 7, AUG: 8, SEP: 9, OCT: 10, NOV: 11, DEC: 12 
+            const MONTHS = {
+                JAN: 1, FEB: 2, MAR: 3, APR: 4, MAY: 5, JUN: 6,
+                JUL: 7, AUG: 8, SEP: 9, OCT: 10, NOV: 11, DEC: 12
             };
 
             const parseTimeKey = (key) => {
@@ -269,9 +269,9 @@ import { updateTitle } from './config/chartUtils';
             const timeline = labels
                 .map(lbl => ({ lbl, ts: parseTimeKey(lbl) }))
                 .filter(x => x.ts) // keep only parseable keys
-                .sort((a,b) => (a.ts.y - b.ts.y) || (a.ts.m - b.ts.m))
+                .sort((a, b) => (a.ts.y - b.ts.y) || (a.ts.m - b.ts.m))
                 .map(x => x.lbl);
-            
+
             if (!timeline.length) { this._teardownChart(); return; }
 
             const btn = this.shadowRoot.getElementById('play-pause-button');
@@ -340,71 +340,71 @@ import { updateTitle } from './config/chartUtils';
             const dimDescription = dimensions[0]?.description || 'Category';
             const autoTitle = `${seriesName} per ${dimDescription}`;
             const titleText = updateTitle(autoTitle, this.chartTitle);
-        
+
 
             if (!this._chart) {
                 const chartOptions = {
-                    chart: { 
-                        animation: { 
-                            duration: 500 
-                        }, 
-                        marginRight: 50 
+                    chart: {
+                        animation: {
+                            duration: 500
+                        },
+                        marginRight: 50
                     },
-                    title: { 
-                        text: titleText, 
+                    title: {
+                        text: titleText,
                         align: this.titleAlignment || 'left',
-                        style: { 
-                            fontSize: this.titleSize || '16px', 
-                            fontWeight: this.titleFontStyle || 'bold', 
-                            color: this.titleColor || '#004b8d' 
+                        style: {
+                            fontSize: this.titleSize || '16px',
+                            fontWeight: this.titleFontStyle || 'bold',
+                            color: this.titleColor || '#004b8d'
                         }
                     },
                     subtitle: {
                         text: getSubtitle(currentLabel()),
-                        floating: true, 
-                        align: 'right', 
+                        floating: true,
+                        align: 'right',
                         verticalAlign: 'middle',
-                        useHTML: true, 
-                        y: 100, 
+                        useHTML: true,
+                        y: 100,
                         x: -20
                     },
-                    credits: { 
-                        enabled: false 
+                    credits: {
+                        enabled: false
                     },
-                    legend: { 
-                        enabled: false 
+                    legend: {
+                        enabled: false
                     },
-                    xAxis: { 
-                        type: 'category' 
+                    xAxis: {
+                        type: 'category'
                     },
-                    yAxis: { 
-                        opposite: true, 
-                        tickPixelInterval: 150, 
-                        title: { 
-                            text: null 
-                        } 
+                    yAxis: {
+                        opposite: true,
+                        tickPixelInterval: 150,
+                        title: {
+                            text: null
+                        }
                     },
                     plotOptions: {
                         series: {
-                            animation: false, 
-                            groupPadding: 0, 
-                            pointPadding: 0.1, 
+                            animation: false,
+                            groupPadding: 0,
+                            pointPadding: 0.1,
                             borderWidth: 0,
                             colorByPoint: true,
-                            dataSorting: { 
-                                enabled: true, 
-                                matchByName: true 
+                            dataSorting: {
+                                enabled: true,
+                                matchByName: true
                             },
                             type: 'bar',
-                            dataLabels: { 
-                                enabled: true 
+                            dataLabels: {
+                                enabled: true
                             }
                         }
                     },
-                    series: [{ 
-                        type: 'bar', 
-                        name: String(currentLabel()), 
-                        data: getData(currentLabel()) 
+                    series: [{
+                        type: 'bar',
+                        name: String(currentLabel()),
+                        data: getData(currentLabel())
                     }],
                     responsive: {
                         rules: [{
@@ -426,8 +426,22 @@ import { updateTitle } from './config/chartUtils';
                 };
                 this._chart = Highcharts.chart(containerEl, chartOptions);
             } else {
+                // this._chart.update({ subtitle: { text: getSubtitle(currentLabel()) } }, false, false, false);
+                // this._chart.series[0].update({ name: String(currentLabel()), data: getData(currentLabel()) }, true, { duration: 500 });
+                const s0 = this._chart.series[0];
+
+                // keep sorting by name so points are matched across frames
+                s0.update({ dataSorting: { enabled: true, matchByName: true } }, false, false);
+
+                // mutate existing points in-place (so only changed bars animate)
+                s0.setData(getData(currentLabel()), false, { duration: 500 }, true);
+
+                // update series name (no redraw yet)
+                s0.update({ name: String(currentLabel()) }, false, false);
+
+                // update subtitle last and redraw once
                 this._chart.update({ subtitle: { text: getSubtitle(currentLabel()) } }, false, false, false);
-                this._chart.series[0].update({ name: String(currentLabel()), data: getData(currentLabel()) }, true, { duration: 500 });
+                this._chart.redraw();
             }
 
             const chart = this._chart;
@@ -486,7 +500,7 @@ import { updateTitle } from './config/chartUtils';
                         // make sure dataSorting is still on, but replace data atomically
                         s0.update({ dataSorting: { enabled: true, matchByName: true } }, false, false);
                         // setData 
-                        s0.setData(nextData, false, false, false);
+                        s0.setData(nextData, false, { duration: 500 }, true);
                         s0.update({ name: String(label) }, false, false);
                     }
 
@@ -518,7 +532,7 @@ import { updateTitle } from './config/chartUtils';
                 const s0 = chart.series && chart.series[0];
                 if (s0) {
                     s0.update({ dataSorting: { enabled: true, matchByName: true } }, false, false);
-                    s0.setData(nextData0, false, false, false);
+                    s0.setData(nextData, false, { duration: 500 }, true);
                     s0.update({ name: String(label0) }, false, false);
                 }
 
