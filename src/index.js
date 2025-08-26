@@ -532,7 +532,7 @@ import { updateTitle } from './config/chartUtils';
                 const s0 = chart.series && chart.series[0];
                 if (s0) {
                     s0.update({ dataSorting: { enabled: true, matchByName: true } }, false, false);
-                    s0.setData(nextData, false, { duration: 500 }, true);
+                    s0.setData(nextData0, false, { duration: 500 }, true);
                     s0.update({ name: String(label0) }, false, false);
                 }
 
