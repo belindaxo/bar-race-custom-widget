@@ -363,8 +363,30 @@ import { min } from 'd3';
                         pause(btn);
                     }
 
+                    // neutralize pointer/tooltip state before update
+                    try {
+                        chartNow.hoverPoints = [];
+                        chartNow.hoverPoint = null;
+                        chartNow.pointer?.reset?.({ touched: false });
+                        chartNow.tooltip?.hide?.(0);
+                    } catch { }
+
+                    // compute next frame
+                    const nextData = getData(label);
+                    const s0 = chartNow.series && chartNow.series[0];
+
+                    // batch: subtitle -> data -> name -> single redraw
                     chartNow.update({ subtitle: { text: getSubtitle(label) } }, false, false, false);
-                    chartNow.series[0].update({ name: String(label), data: getData(label) }, true, { duration: 500 });
+
+                    if (s0) {
+                        // make sure dataSorting is still on, but replace data atomically
+                        s0.update({ dataSorting: { enabled: true, matchByName: true } }, false, false);
+                        // setData 
+                        s0.setData(nextData, false, false, false);
+                        s0.update({ name: String(label) }, false, false);
+                    }
+
+                    chartNow.redraw();
 
                     this._currentIdx = nextIdx;
                 });
