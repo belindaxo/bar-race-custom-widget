@@ -297,7 +297,7 @@ import { createChartStylesheet } from './config/styles';
 
             if (!this._chart) {
                 const chartOptions = {
-                    chart: { animation: { duration: 1000 }, marginRight: 50 },
+                    chart: { animation: { duration: 500 }, marginRight: 50 },
                     title: { text: 'Chart Title', align: 'left' },
                     subtitle: {
                         text: getSubtitle(currentLabel()),
@@ -339,7 +339,7 @@ import { createChartStylesheet } from './config/styles';
                 this._chart = Highcharts.chart(containerEl, chartOptions);
             } else {
                 this._chart.update({ subtitle: { text: getSubtitle(currentLabel()) } }, false, false, false);
-                this._chart.series[0].update({ name: String(currentLabel()), data: getData(currentLabel()) }, true, { duration: 1000 });
+                this._chart.series[0].update({ name: String(currentLabel()), data: getData(currentLabel()) }, true, { duration: 500 });
             }
 
             const chart = this._chart;
