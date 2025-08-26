@@ -426,8 +426,6 @@ import { updateTitle } from './config/chartUtils';
                 };
                 this._chart = Highcharts.chart(containerEl, chartOptions);
             } else {
-                // this._chart.update({ subtitle: { text: getSubtitle(currentLabel()) } }, false, false, false);
-                // this._chart.series[0].update({ name: String(currentLabel()), data: getData(currentLabel()) }, true, { duration: 500 });
                 const s0 = this._chart.series[0];
 
                 // keep sorting by name so points are matched across frames
@@ -440,7 +438,19 @@ import { updateTitle } from './config/chartUtils';
                 s0.update({ name: String(currentLabel()) }, false, false);
 
                 // update subtitle last and redraw once
-                this._chart.update({ subtitle: { text: getSubtitle(currentLabel()) } }, false, false, false);
+                this._chart.update({ 
+                    title: {
+                        text: titleText,
+                        align: this.titleAlignment || 'left',
+                        style: {
+                            fontSize: this.titleSize || '16px',
+                            fontWeight: this.titleFontStyle || 'bold',
+                            color: this.titleColor || '#004b8d'
+                        }
+                    },
+                    subtitle: { text: getSubtitle(currentLabel()) } 
+                }, false, false, false);
+                
                 this._chart.redraw();
             }
 
