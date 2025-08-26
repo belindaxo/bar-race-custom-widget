@@ -339,7 +339,7 @@ import { createChartStylesheet } from './config/styles';
                 this._chart = Highcharts.chart(containerEl, chartOptions);
             } else {
                 this._chart.update({ subtitle: { text: getSubtitle(currentLabel()) } }, false, false, false);
-                this._chart.series[0].update({ name: String(currentLabel()), data: getData(currentLabel()) }, true, { duration: 500 });
+                this._chart.series[0].update({ name: String(currentLabel()), data: getData(currentLabel()) }, true, { duration: 1000 });
             }
 
             const chart = this._chart;
