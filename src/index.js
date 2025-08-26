@@ -4,65 +4,65 @@ import { processSeriesData } from './data/dataProcessor';
 import { applyHighchartsDefaults } from './config/highchartsSetup';
 import { createChartStylesheet } from './config/styles';
 
-// Install the data label text animation shim
-if (!Highcharts._barRaceLabelShimInstalled) {
-    (function (H) {
-        const FLOAT = /^-?\d+\.?\d*$/;
+// // Install the data label text animation shim
+// if (!Highcharts._barRaceLabelShimInstalled) {
+//     (function (H) {
+//         const FLOAT = /^-?\d+\.?\d*$/;
 
-        H.Fx.prototype.textSetter = function () {
-            const chart = H.charts[this.elem.renderer.chartIndex];
+//         H.Fx.prototype.textSetter = function () {
+//             const chart = H.charts[this.elem.renderer.chartIndex];
 
-            let thousandsSep = chart.numberFormatter('1000.0')[1];
-            if (/[0-9]/.test(thousandsSep)) {
-                thousandsSep = ' ';
-            }
-            const replaceRegEx = new RegExp(thousandsSep, 'g');
+//             let thousandsSep = chart.numberFormatter('1000.0')[1];
+//             if (/[0-9]/.test(thousandsSep)) {
+//                 thousandsSep = ' ';
+//             }
+//             const replaceRegEx = new RegExp(thousandsSep, 'g');
 
-            let startValue = (this.start ?? '').toString().replace(replaceRegEx, '');
-            let endValue = (this.end ?? '').toString().replace(replaceRegEx, '');
-            let currentValue = endValue;
+//             let startValue = (this.start ?? '').toString().replace(replaceRegEx, '');
+//             let endValue = (this.end ?? '').toString().replace(replaceRegEx, '');
+//             let currentValue = endValue;
 
-            if (FLOAT.test(startValue) && FLOAT.test(endValue)) {
-                const s = parseFloat(startValue);
-                const e = parseFloat(endValue);
-                currentValue = chart.numberFormatter(Math.round(s + (e - s) * this.pos), 0);
-            }
-            this.elem.endText = this.end;
-            this.elem.attr(this.prop, currentValue, null, true);
-        };
+//             if (FLOAT.test(startValue) && FLOAT.test(endValue)) {
+//                 const s = parseFloat(startValue);
+//                 const e = parseFloat(endValue);
+//                 currentValue = chart.numberFormatter(Math.round(s + (e - s) * this.pos), 0);
+//             }
+//             this.elem.endText = this.end;
+//             this.elem.attr(this.prop, currentValue, null, true);
+//         };
 
-        H.SVGElement.prototype.textGetter = function () {
-            const ct = this.text.element.textContent || '';
-            return this.endText ? this.endText : ct.substring(0, Math.floor(ct.length / 2));
-        };
+//         H.SVGElement.prototype.textGetter = function () {
+//             const ct = this.text.element.textContent || '';
+//             return this.endText ? this.endText : ct.substring(0, Math.floor(ct.length / 2));
+//         };
 
-        H.wrap(H.Series.prototype, 'drawDataLabels', function (proceed) {
-            const attr = H.SVGElement.prototype.attr;
-            const chart = this.chart;
+//         H.wrap(H.Series.prototype, 'drawDataLabels', function (proceed) {
+//             const attr = H.SVGElement.prototype.attr;
+//             const chart = this.chart;
 
-            if (chart.sequenceTimer) {
-                this.points.forEach(point =>
-                    (point.dataLabels || []).forEach(label => {
-                        label.attr = function (hash) {
-                            if (hash && hash.text !== undefined && chart.isResizing === 0) {
-                                const text = hash.text;
-                                delete hash.text;
-                                return this.attr(hash).animate({ text });
-                            }
-                            return attr.apply(this, arguments);
-                        };
-                    })
-                );
-            }
+//             if (chart.sequenceTimer) {
+//                 this.points.forEach(point =>
+//                     (point.dataLabels || []).forEach(label => {
+//                         label.attr = function (hash) {
+//                             if (hash && hash.text !== undefined && chart.isResizing === 0) {
+//                                 const text = hash.text;
+//                                 delete hash.text;
+//                                 return this.attr(hash).animate({ text });
+//                             }
+//                             return attr.apply(this, arguments);
+//                         };
+//                     })
+//                 );
+//             }
 
-            const ret = proceed.apply(this, Array.prototype.slice.call(arguments, 1));
-            this.points.forEach(p => (p.dataLabels || []).forEach(d => (d.attr = attr)));
-            return ret;
-        });
-    })(Highcharts);
+//             const ret = proceed.apply(this, Array.prototype.slice.call(arguments, 1));
+//             this.points.forEach(p => (p.dataLabels || []).forEach(d => (d.attr = attr)));
+//             return ret;
+//         });
+//     })(Highcharts);
 
-    Highcharts._barRaceLabelShimInstalled = true;
-}
+//     Highcharts._barRaceLabelShimInstalled = true;
+// }
 
 /* ---------- SAFETY PATCHES: HC teardown hardening (idempotent destroy + null-safe erase) ---------- */
 (function (H) {
