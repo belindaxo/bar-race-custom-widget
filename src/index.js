@@ -232,7 +232,7 @@ import { updateTitle } from './config/chartUtils';
                     if (mon && Number.isFinite(yr)) return { y: yr, m: mon, label: s };
                 }
 
-                // MM/YYYY
+                // MM/YYYY or WW/YYYY
                 m = s.match(/^(\d{2})\/(\d{4})$/);
                 if (m) {
                     const mon = Math.max(1, Math.min(12, +m[1]));
@@ -462,6 +462,12 @@ import { updateTitle } from './config/chartUtils';
                 button.style.fontSize = '18px';
                 if (chart.sequenceTimer) clearInterval(chart.sequenceTimer);
                 chart.sequenceTimer = undefined;
+
+                if (input) {
+                    input.disabled = false;
+                    input.style.pointerEvents = 'auto';
+                    input.setAttribute('aria-disabled', 'false');
+                }
             };
 
             // RAF-batched updates
@@ -553,6 +559,12 @@ import { updateTitle } from './config/chartUtils';
                 button.style.fontSize = '22px';
                 if (chart.sequenceTimer) clearInterval(chart.sequenceTimer);
                 chart.sequenceTimer = setInterval(() => doUpdate(1), 1000);
+
+                if (input) {
+                    input.disabled = true;
+                    input.style.pointerEvents = 'none';
+                    input.setAttribute('aria-disabled', 'true');
+                }
             };
 
             // (re)bind listeners
@@ -600,6 +612,12 @@ import { updateTitle } from './config/chartUtils';
             try { if (this._chart) this._chart.destroy(); } catch { }
             this._chart = null;
             this._isDestroying = false;
+
+            if (input) {
+                input.disabled = false;
+                input.style.pointerEvents = 'auto';
+                input.setAttribute('aria-disabled', 'false');
+            }
         }
     }
 
