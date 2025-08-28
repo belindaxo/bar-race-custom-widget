@@ -280,7 +280,7 @@
         }
 
         get subtitleX() {
-            return this._shadowRoot.getElementById('subtitleX').value;
+            return parseInt(this._shadowRoot.getElementById('subtitleX').value, 10);
         }
 
         set subtitleX(value) {
@@ -288,7 +288,7 @@
         }
 
         get subtitleY() {
-            return this._shadowRoot.getElementById('subtitleY').value;
+            return parseInt(this._shadowRoot.getElementById('subtitleY').value, 10);
         }
 
         set subtitleY(value) {
