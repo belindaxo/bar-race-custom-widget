@@ -85,12 +85,12 @@ import { updateTitle } from './config/chartUtils';
             this.shadowRoot.adoptedStyleSheets = [createChartStylesheet()];
             this.shadowRoot.innerHTML = `
                 <div id="parent-container">
-                <div id="play-controls">
-                    <button id="play-pause-button" title="play" style="margin-left: 10px; width: 45px; height: 45px; cursor: pointer; border: 1px solid #004b8d;
-                    border-radius: 25px; color: white; background-color: #004b8d; transition: background-color 250ms; font-size: 18px;">▶</button>
-                    <input id="play-range" type="range" style="transform: translateY(2.5px); width: calc(100% - 90px); background: #f8f8f8;"/>
-                </div>
-                <div id="container"></div>
+                    <div id="play-controls">
+                        <button id="play-pause-button" title="play" style="margin-left: 10px; width: 45px; height: 45px; cursor: pointer; border: 1px solid #004b8d;
+                        border-radius: 25px; color: white; background-color: #004b8d; transition: background-color 250ms; font-size: 18px;">▶</button>
+                        <input id="play-range" type="range" style="transform: translateY(2.5px); width: calc(100% - 90px); background: #f8f8f8;"/>
+                    </div>
+                    <div id="container"></div>
                 </div>
             `;
 
@@ -404,6 +404,11 @@ import { updateTitle } from './config/chartUtils';
                                 enabled: true,
                                 style: {
                                     fontWeight: 'normal'
+                                },
+                                formatter: function () {
+                                    const rawValue = point.value;
+                                    const value = Highcharts.numberFormat(rawValue, this.decimalPlaces || -1, '.', ',');
+                                    return `${value}`;
                                 }
                             }
                         }
