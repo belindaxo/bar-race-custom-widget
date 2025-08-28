@@ -406,7 +406,7 @@ import { updateTitle } from './config/chartUtils';
                                     fontWeight: 'normal'
                                 },
                                 formatter: function () {
-                                    const rawValue = point.value;
+                                    const rawValue = this.value;
                                     const value = Highcharts.numberFormat(rawValue, this.decimalPlaces || -1, '.', ',');
                                     return `${value}`;
                                 }
