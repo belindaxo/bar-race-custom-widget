@@ -181,7 +181,9 @@ import { updateTitle } from './config/chartUtils';
          */
         static get observedAttributes() {
             return [
-                'chartTitle', 'titleSize', 'titleFontStyle', 'titleAlignment', 'titleColor'                // Title properties
+                'chartTitle', 'titleSize', 'titleFontStyle', 'titleAlignment', 'titleColor',    // Title properties
+                'subtitleDateSize', 'subtitleTotalSize', 'subtitleX', 'subtitleY',              // Subtitle properties 
+                'scaleFormat', 'decimalPlaces'                                                  // Number formatting
             ];
         }
 
@@ -323,10 +325,12 @@ import { updateTitle } from './config/chartUtils';
             const getSubtitle = (label) => {
                 const sum = Object.values(structuredData[label] || {}).reduce((s, v) => s + (Number(v) || 0), 0);
                 const total = Highcharts.numberFormat(sum, 0, '.', ',');
+                const dateSize = this.subtitleDateSize || '80px';
+                const totalSize = this.subtitleTotalSize || '22px';
                 return `
-                    <span style="font-size: 80px">${label}</span>
+                    <span style="font-size: ${dateSize}">${label}</span>
                     <br>
-                    <span style="font-size: 22px">
+                    <span style="font-size: ${totalSize}">
                         Total: <b>${total}</b>
                     </span>
                 `;
@@ -365,8 +369,8 @@ import { updateTitle } from './config/chartUtils';
                         align: 'right',
                         verticalAlign: 'middle',
                         useHTML: true,
-                        y: 100,
-                        x: -20
+                        y: this.subtitleY || 100,
+                        x: this.subtitleX || -20
                     },
                     credits: {
                         enabled: false

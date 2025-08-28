@@ -56,6 +56,26 @@
             "type": "string",
             "description": "The color of the title text",
             "default": "#004B8D"
+        },
+        "subtitleDateSize": {
+            "type": "string",
+            "description": "The font size of the subtitle date text",
+            "default": "80px"
+        },
+        "subtitleTotalSize": {
+            "type": "string",
+            "description": "The font size of the subtitle total text",
+            "default": "22px"
+        },
+        "subtitleX": {
+            "type": "integer",
+            "description": "The horizontal position of the subtitle",
+            "default": -20
+        },
+        "subtitleY": {
+            "type": "integer",
+            "description": "The vertical position of the subtitle",
+            "default": 100
         }
     },
     "methods": {

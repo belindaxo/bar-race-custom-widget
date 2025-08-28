@@ -53,6 +53,94 @@
                 </table>
             </tr>
         </table>
+        <legend style="font-weight: bold;font-size: 18px; margin-top: 10px;"> Subtitle Properties</legend>
+        <table>
+            <tr>
+                <td> Date Size</td>
+            </tr>
+            <tr>
+                <td>
+                    <select id="subtitleDateSize">
+                        <option value="10px">10</option>
+                        <option value="12px">12</option>
+                        <option value="14px">14</option>
+                        <option value="16px">16</option>
+                        <option value="18px">18</option>
+                        <option value="20px">20</option>
+                        <option value="22px">22</option>
+                        <option value="24px">24</option>
+                        <option value="32px">32</option>
+                        <option value="48px">48</option>
+                        <option value="72px">72</option>
+                        <option value="80px" selected>80</option>
+                    </select>
+                </td>
+            </tr>
+            <tr>
+                <td> Total Size</td>
+            </tr>
+            <tr>
+                <td>
+                    <select id="subtitleTotalSize">
+                        <option value="10px">10</option>
+                        <option value="12px">12</option>
+                        <option value="14px">14</option>
+                        <option value="16px">16</option>
+                        <option value="18px">18</option>
+                        <option value="20px">20</option>
+                        <option value="22px" selected>22</option>
+                        <option value="24px">24</option>
+                        <option value="32px">32</option>
+                        <option value="48px">48</option>
+                        <option value="72px">72</option>
+                        <option value="80px">80</option>
+                    </select>
+                </td>
+            </tr>
+            <tr>
+                <td> X Position</td>
+                <td> Y Position</td>
+            </tr>
+            <tr>
+                <td>
+                    <input id="subtitleX" type="number" value="-20" style="width: 60px;">
+                </td>
+                <td>
+                    <input id="subtitleY" type="number" value="100" style="width: 60px;">
+                </td>
+            </tr>
+        </table>
+        <legend style="font-weight: bold;font-size: 18px; margin-top: 10px;"> Number Formatting </legend>
+        <table>
+            <tr>
+                <td>Scale Format</td>
+            </tr>
+            <tr>
+                <td>
+                    <select id="scaleFormat">
+                        <option value="unformatted" selected>Unformatted</option>
+                        <option value="k">Thousands (k)</option>
+                        <option value="m">Millions (m)</option>
+                        <option value="b">Billions (b)</option>
+                    </select>
+                </td>
+            </tr>
+            <tr>
+                <td>Decimal Places</td>
+            </tr>
+            <tr>
+                <td>
+                    <select id="decimalPlaces">
+                        <option value="0" selected>0</option>
+                        <option value="1">1</option>
+                        <option value="2">2</option>
+                        <option value="3">3</option>
+                        <option value="4">4</option>
+                        <option value="5">5</option>
+                    </select>
+                </td>
+            </tr>
+        </table>
         <tr>
             <button id="resetDefaults" type="button" style="margin-top: 10px; margin-bottom: 10px;">Reset to Default</button>
         </tr>
@@ -69,7 +157,13 @@
                 titleSize: '16px',
                 titleFontStyle: 'bold',
                 titleAlignment: 'left',
-                titleColor: '#004B8D'
+                titleColor: '#004B8D',
+                subtitleDateSize: '80px',
+                subtitleTotalSize: '22px',
+                subtitleX: -20,
+                subtitleY: 100,
+                scaleFormat: 'unformatted',
+                decimalPlaces: '0'
             };
 
             this._shadowRoot = this.attachShadow({ mode: 'open' });
@@ -80,11 +174,17 @@
             this._shadowRoot.getElementById('titleFontStyle').addEventListener('change', this._submit.bind(this));
             this._shadowRoot.getElementById('titleAlignment').addEventListener('change', this._submit.bind(this));
             this._shadowRoot.getElementById('titleColor').addEventListener('change', this._submit.bind(this));
+            this._shadowRoot.getElementById('subtitleDateSize').addEventListener('change', this._submit.bind(this));
+            this._shadowRoot.getElementById('subtitleTotalSize').addEventListener('change', this._submit.bind(this));
+            this._shadowRoot.getElementById('subtitleX').addEventListener('change', this._submit.bind(this));
+            this._shadowRoot.getElementById('subtitleY').addEventListener('change', this._submit.bind(this));
+            this._shadowRoot.getElementById('scaleFormat').addEventListener('change', this._submit.bind(this));
+            this._shadowRoot.getElementById('decimalPlaces').addEventListener('change', this._submit.bind(this));
 
             // Reset button logic
             this._shadowRoot.getElementById('resetDefaults').addEventListener('click', () => {
                 for (const key in DEFAULTS) {
-                    if (key === 'chartTitle') {
+                    if (key === 'chartTitle' || key === 'subtitleX' || key === 'subtitleY') {
                         continue;
                     }
 
@@ -110,7 +210,13 @@
                         titleSize: this.titleSize,
                         titleFontStyle: this.titleFontStyle,
                         titleAlignment: this.titleAlignment,
-                        titleColor: this.titleColor
+                        titleColor: this.titleColor,
+                        subtitleDateSize: this.subtitleDateSize,
+                        subtitleTotalSize: this.subtitleTotalSize,
+                        subtitleX: this.subtitleX,
+                        subtitleY: this.subtitleY,
+                        scaleFormat: this.scaleFormat,
+                        decimalPlaces: this.decimalPlaces
                     }
                 }
             }));
@@ -155,6 +261,54 @@
 
         set titleColor(value) {
             this._shadowRoot.getElementById('titleColor').value = value;
+        }
+
+        get subtitleDateSize() {
+            return this._shadowRoot.getElementById('subtitleDateSize').value;
+        }
+
+        set subtitleDateSize(value) {
+            this._shadowRoot.getElementById('subtitleDateSize').value = value;
+        }
+
+        get subtitleTotalSize() {
+            return this._shadowRoot.getElementById('subtitleTotalSize').value;
+        }
+
+        set subtitleTotalSize(value) {
+            this._shadowRoot.getElementById('subtitleTotalSize').value = value;
+        }
+
+        get subtitleX() {
+            return this._shadowRoot.getElementById('subtitleX').value;
+        }
+
+        set subtitleX(value) {
+            this._shadowRoot.getElementById('subtitleX').value = value;
+        }
+
+        get subtitleY() {
+            return this._shadowRoot.getElementById('subtitleY').value;
+        }
+
+        set subtitleY(value) {
+            this._shadowRoot.getElementById('subtitleY').value = value;
+        }
+
+        get scaleFormat() {
+            return this._shadowRoot.getElementById('scaleFormat').value;
+        }
+
+        set scaleFormat(value) {
+            this._shadowRoot.getElementById('scaleFormat').value = value;
+        }
+
+        get decimalPlaces() {
+            return this._shadowRoot.getElementById('decimalPlaces').value;
+        }
+
+        set decimalPlaces(value) {
+            this._shadowRoot.getElementById('decimalPlaces').value = value;
         }
     }
     customElements.define('com-sap-sample-bar-race-aps', BarRaceAps);
