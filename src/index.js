@@ -404,11 +404,6 @@ import { updateTitle } from './config/chartUtils';
                                 enabled: true,
                                 style: {
                                     fontWeight: 'normal'
-                                },
-                                formatter: function () {
-                                    const rawValue = this.value;
-                                    const value = Highcharts.numberFormat(rawValue, this.decimalPlaces || -1, '.', ',');
-                                    return `${value}`;
                                 }
                             }
                         }
