@@ -4,8 +4,6 @@ import { processSeriesData } from './data/dataProcessor';
 import { applyHighchartsDefaults } from './config/highchartsSetup';
 import { createChartStylesheet } from './config/styles';
 import { updateTitle } from './config/chartUtils';
-import { scaleValue } from './formatting/scaleFormatter';
-import { formatDataLabels } from './formatting/labelFormatter';
 
 /* ---------- SAFETY PATCHES: HC teardown hardening (idempotent destroy + null-safe erase) ---------- */
 (function (H) {
@@ -347,8 +345,6 @@ import { formatDataLabels } from './formatting/labelFormatter';
             const autoTitle = `${seriesName} per ${dimDescription}`;
             const titleText = updateTitle(autoTitle, this.chartTitle);
 
-            const scaleFormat = (value) => scaleValue(value, this.scaleFormat, this.decimalPlaces);
-
 
             if (!this._chart) {
                 const chartOptions = {
@@ -406,7 +402,6 @@ import { formatDataLabels } from './formatting/labelFormatter';
                             type: 'bar',
                             dataLabels: {
                                 enabled: true,
-                                formatter: formatDataLabels(scaleFormat),
                                 style: {
                                     fontWeight: 'normal'
                                 }
