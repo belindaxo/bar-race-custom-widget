@@ -452,7 +452,11 @@ import { updateTitle } from './config/chartUtils';
                             color: this.titleColor || '#004b8d'
                         }
                     },
-                    subtitle: { text: getSubtitle(currentLabel()) } 
+                    subtitle: { 
+                        text: getSubtitle(currentLabel()),
+                        y: this.subtitleY || 100,
+                        x: this.subtitleX || -20
+                    } 
                 }, false, false, false);
                 
                 this._chart.redraw();
