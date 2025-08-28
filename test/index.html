@@ -12,8 +12,8 @@
 <body>
     <div id="parent-container">
         <div id="play-controls">
-            <button id="play-pause-button" title="play" style="margin-left: 10px; width: 45px; height: 45px; cursor: pointer; border: 1px solid #004b8d;
-                border-radius: 25px; color: white; background-color: #004b8d; transition: background-color 250ms; font-size: 18px;">▶</button>
+            <button id="play-pause-button" title="play" style="margin-left: 10px; width: 45px; height: 45px; cursor: pointer; border: none;
+                        border-radius: 0; color: #004b8d; background-color: transparent; font-size: 24px;">▶</button>
             <input id="play-range" type="range" value="1960" min="1960" max="2022" style="transform: translateY(2.5px); width: calc(100% - 90px); background: #f8f8f8;"/>
         </div>
         <div id="container"></div>
@@ -247,7 +247,7 @@
         function pause(button) {
             button.title = 'play';
             button.innerText = '▶';
-            button.style.fontSize = '18px';
+            button.style.fontSize = '24px';
             clearTimeout(chart.sequenceTimer);
             chart.sequenceTimer = undefined;
         }
@@ -288,7 +288,7 @@
         function play(button) {
             button.title = 'pause';
             button.innerText = '⏸';
-            button.style.fontSize = '22px';
+            button.style.fontSize = '24px';
             chart.sequenceTimer = setInterval(function () {
                 update(1);
             }, 500);

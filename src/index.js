@@ -87,7 +87,7 @@ import { updateTitle } from './config/chartUtils';
                 <div id="parent-container">
                     <div id="play-controls">
                         <button id="play-pause-button" title="play" style="margin-left: 10px; width: 45px; height: 45px; cursor: pointer; border: none;
-                        border-radius: 0; color: #004b8d; background-color: transparent; font-size: 18px;">▶</button>
+                        border-radius: 0; color: #004b8d; background-color: transparent; font-size: 24px;">▶</button>
                         <input id="play-range" type="range" style="transform: translateY(2.5px); width: calc(100% - 90px); background: #f8f8f8;"/>
                     </div>
                     <div id="container"></div>
@@ -470,7 +470,7 @@ import { updateTitle } from './config/chartUtils';
             const pause = (button) => {
                 button.title = 'play';
                 button.innerText = '▶';
-                button.style.fontSize = '18px';
+                button.style.fontSize = '24px';
                 if (chart.sequenceTimer) clearInterval(chart.sequenceTimer);
                 chart.sequenceTimer = undefined;
 
@@ -567,7 +567,7 @@ import { updateTitle } from './config/chartUtils';
 
                 button.title = 'pause';
                 button.innerText = '⏸';
-                button.style.fontSize = '22px';
+                button.style.fontSize = '24px';
                 if (chart.sequenceTimer) clearInterval(chart.sequenceTimer);
                 chart.sequenceTimer = setInterval(() => doUpdate(1), 1000);
 
