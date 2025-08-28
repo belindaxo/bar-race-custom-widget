@@ -84,7 +84,7 @@ import { updateTitle } from './config/chartUtils';
 
             this.shadowRoot.adoptedStyleSheets = [createChartStylesheet()];
             this.shadowRoot.innerHTML = `
-                <div id="parent-container">
+                <div id="parent-container" style= "background-color: white;">
                     <div id="play-controls">
                         <button id="play-pause-button" title="play" style="margin-left: 10px; width: 45px; height: 45px; cursor: pointer; border: none;
                         border-radius: 0; color: #004b8d; background-color: transparent; font-size: 24px;">▶</button>
