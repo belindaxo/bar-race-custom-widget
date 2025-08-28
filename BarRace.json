@@ -76,6 +76,16 @@
             "type": "integer",
             "description": "The vertical position of the subtitle",
             "default": 100
+        },
+        "scaleFormat": {
+            "type": "string",
+            "description": "The scale of the numbers (unformatted, k, m, b)",
+            "default": "unformatted"
+        },
+        "decimalPlaces": {
+            "type": "integer",
+            "description": "The number of decimal places to display",
+            "default": 0
         }
     },
     "methods": {
