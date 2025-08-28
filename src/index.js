@@ -341,8 +341,9 @@ import { updateTitle } from './config/chartUtils';
             applyHighchartsDefaults();
 
             const seriesName = measures[0]?.label || 'Value';
-            const dimDescription = dimensions[0]?.description || 'Category';
-            const autoTitle = `${seriesName} per ${dimDescription}`;
+            const dateDimDesc = dimensions[0]?.description || 'Date';
+            const categoryDimDesc = dimensions[1]?.description || 'Category';
+            const autoTitle = `${seriesName} per ${categoryDimDesc}`;
             const titleText = updateTitle(autoTitle, this.chartTitle);
 
 
