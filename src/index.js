@@ -5,6 +5,7 @@ import { applyHighchartsDefaults } from './config/highchartsSetup';
 import { createChartStylesheet } from './config/styles';
 import { updateTitle } from './config/chartUtils';
 import { formatDataLabels } from './formatting/labelFormatter';
+import { scaleValue } from './formatting/scaleFormatter';
 
 /* ---------- SAFETY PATCHES: HC teardown hardening (idempotent destroy + null-safe erase) ---------- */
 (function (H) {
