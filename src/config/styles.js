@@ -13,7 +13,7 @@ export function createChartStylesheet() {
         }
         #container {
             width: 95%;
-            height: 95%;
+            height: 80%;
             font-family: '72';
         }
         #parent-container {
