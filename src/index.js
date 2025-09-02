@@ -409,8 +409,7 @@ import { scaleValue } from './formatting/scaleFormatter';
                                 enabled: true,
                                 style: {
                                     fontWeight: 'normal'
-                                },
-                                formatter: formatDataLabels(scaleFormat)
+                                }
                             }
                         }
                     },
