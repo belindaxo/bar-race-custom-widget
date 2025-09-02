@@ -4,6 +4,7 @@ import { processSeriesData } from './data/dataProcessor';
 import { applyHighchartsDefaults } from './config/highchartsSetup';
 import { createChartStylesheet } from './config/styles';
 import { updateTitle } from './config/chartUtils';
+import { formatDataLabels } from './formatting/labelFormatter';
 
 /* ---------- SAFETY PATCHES: HC teardown hardening (idempotent destroy + null-safe erase) ---------- */
 (function (H) {
@@ -338,6 +339,7 @@ import { updateTitle } from './config/chartUtils';
             };
 
             const currentLabel = () => timeline[this._currentIdx];
+            const scaleFormat = (value) => scaleValue(value, this.scaleFormat, this.decimalPlaces);
 
             applyHighchartsDefaults();
 
@@ -406,7 +408,8 @@ import { updateTitle } from './config/chartUtils';
                                 enabled: true,
                                 style: {
                                     fontWeight: 'normal'
-                                }
+                                },
+                                formatter: formatDataLabels(scaleFormat)
                             }
                         }
                     },
