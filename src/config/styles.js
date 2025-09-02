@@ -12,13 +12,12 @@ export function createChartStylesheet() {
             src: url('../fonts/72-Regular.woff2') format('woff2');
         }
         #container {
-            width: 100%;
-            height: 100%;
             font-family: '72';
         }
         #parent-container {
             width: 100%;
             height: 100%;
+            font-family: '72';
         }
     `);
     return sheet;
