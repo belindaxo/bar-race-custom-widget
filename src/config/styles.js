@@ -12,12 +12,15 @@ export function createChartStylesheet() {
             src: url('../fonts/72-Regular.woff2') format('woff2');
         }
         #container {
+            display: flex;
+            flex-direction: column;
             font-family: '72';
         }
         #parent-container {
             width: 100%;
+            display: flex;
+            flex-direction: column;
             height: 100%;
-            font-family: '72';
         }
     `);
     return sheet;
