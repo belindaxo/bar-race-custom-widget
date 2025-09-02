@@ -141,6 +141,18 @@
                 </td>
             </tr>
         </table>
+        </table>
+        <legend style="font-weight: bold; font-size: 18px">Rank</legend>
+        <table>
+            <tr>
+                <td>Top N</td>
+            </tr>
+            <tr>
+                <td>
+                    <input id="topN" type="number" min="1" value="10"/>
+                </td>
+            </tr>
+        </table>
         <tr>
             <button id="resetDefaults" type="button" style="margin-top: 10px; margin-bottom: 10px;">Reset to Default</button>
         </tr>
@@ -180,6 +192,7 @@
             this._shadowRoot.getElementById('subtitleY').addEventListener('change', this._submit.bind(this));
             this._shadowRoot.getElementById('scaleFormat').addEventListener('change', this._submit.bind(this));
             this._shadowRoot.getElementById('decimalPlaces').addEventListener('change', this._submit.bind(this));
+            this._shadowRoot.getElementById('topN').addEventListener('change', this._submit.bind(this));
 
             // Reset button logic
             this._shadowRoot.getElementById('resetDefaults').addEventListener('click', () => {
@@ -216,7 +229,8 @@
                         subtitleX: this.subtitleX,
                         subtitleY: this.subtitleY,
                         scaleFormat: this.scaleFormat,
-                        decimalPlaces: this.decimalPlaces
+                        decimalPlaces: this.decimalPlaces,
+                        topN: this.topN
                     }
                 }
             }));
@@ -309,6 +323,14 @@
 
         set decimalPlaces(value) {
             this._shadowRoot.getElementById('decimalPlaces').value = value;
+        }
+
+        get topN() {
+            return this._shadowRoot.getElementById('topN').value;
+        }
+
+        set topN(value) {
+            this._shadowRoot.getElementById('topN').value = value;
         }
     }
     customElements.define('com-sap-sample-bar-race-aps', BarRaceAps);

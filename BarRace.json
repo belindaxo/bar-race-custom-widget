@@ -86,6 +86,11 @@
             "type": "integer",
             "description": "The number of decimal places to display",
             "default": 0
+        },
+        "topN": {
+            "type": "integer",
+            "description": "The number of top items to display",
+            "default": 10
         }
     },
     "methods": {

@@ -183,7 +183,8 @@ import { updateTitle } from './config/chartUtils';
             return [
                 'chartTitle', 'titleSize', 'titleFontStyle', 'titleAlignment', 'titleColor',    // Title properties
                 'subtitleDateSize', 'subtitleTotalSize', 'subtitleX', 'subtitleY',              // Subtitle properties 
-                'scaleFormat', 'decimalPlaces'                                                  // Number formatting
+                'scaleFormat', 'decimalPlaces',                                                 // Number formatting
+                'topN'                                                                          // Rank
             ];
         }
 
@@ -312,7 +313,7 @@ import { updateTitle } from './config/chartUtils';
                 input.value = '0';
             }
 
-            const nbr = 10;
+            const nbr = parseInt(this.topN) || 10;
 
             const getData = (label) => {
                 const timeData = structuredData?.[label] || {};
