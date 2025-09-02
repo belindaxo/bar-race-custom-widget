@@ -340,7 +340,7 @@ import { scaleValue } from './formatting/scaleFormatter';
             };
 
             const currentLabel = () => timeline[this._currentIdx];
-            const scaleFormat = (value) => scaleValue(value, this.scaleFormat, this.decimalPlaces);
+            const scaleFormat = (value) => scaleValue(value, this.scaleFormat, parseInt(this.decimalPlaces) || 0);
 
             applyHighchartsDefaults();
 

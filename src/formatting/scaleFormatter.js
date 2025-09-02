@@ -1,4 +1,10 @@
-
+/**
+ * Scales a numeric value based on the specified scale format.
+ * @param {number} value 
+ * @param {string} scaleFormat 
+ * @param {number} decimalPlaces 
+ * @returns {Object} An object containing the scaled value and its suffix.
+ */
 export function scaleValue(value, scaleFormat, decimalPlaces) {
     let scaled = value;
     let suffix = '';
@@ -9,11 +15,11 @@ export function scaleValue(value, scaleFormat, decimalPlaces) {
             suffix = 'k';
             break;
         case 'm':
-            scaled = value / 1000000;
+            scaled = value / 1_000_000;
             suffix = 'm';
             break;
         case 'b':
-            scaled = value / 1000000000;
+            scaled = value / 1_000_000_000;
             suffix = 'b';
             break;
         default:
