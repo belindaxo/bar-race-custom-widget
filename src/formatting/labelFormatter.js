@@ -9,6 +9,10 @@ export function formatDataLabels(scaleFormat) {
         const rawValue = this.y;
         const { scaledValue, valueSuffix } = scaleFormat(rawValue);
         const value = Highcharts.numberFormat(scaledValue, -1, '.', ',');
-        return `${value}`;
+        if (valueSuffix === 'unformatted') {
+            return `${value}`;
+        } else {
+            return `${value}${valueSuffix}`;
+        }
     }
 }
