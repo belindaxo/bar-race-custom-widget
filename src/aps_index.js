@@ -156,6 +156,17 @@
                 </td>
             </tr>
         </table>
+        <legend style="font-weight: bold; font-size: 18px; margin-top: 10px;"> Bar Race Settings </legend>
+        <table>
+            <tr>
+                <td>Time Interval (ms)</td>
+            </tr>
+            <tr>
+                <td>
+                    <input id="timeInterval" type="number" min="100" value="1000"/>
+                </td>
+            </tr>
+        </table>
         <tr>
             <button id="resetDefaults" type="button" style="margin-top: 10px; margin-bottom: 10px;">Reset to Default</button>
         </tr>
@@ -185,7 +196,8 @@
                 subtitleX: -20,
                 subtitleY: 100,
                 scaleFormat: 'unformatted',
-                decimalPlaces: '0'
+                decimalPlaces: '0',
+                timeInterval: 1000
             };
 
             this._shadowRoot = this.attachShadow({ mode: 'open' });
@@ -203,6 +215,7 @@
             this._shadowRoot.getElementById('scaleFormat').addEventListener('change', this._submit.bind(this));
             this._shadowRoot.getElementById('decimalPlaces').addEventListener('change', this._submit.bind(this));
             this._shadowRoot.getElementById('topN').addEventListener('change', this._submit.bind(this));
+            this._shadowRoot.getElementById('timeInterval').addEventListener('change', this._submit.bind(this));
 
             // Reset button logic
             this._shadowRoot.getElementById('resetDefaults').addEventListener('click', () => {
@@ -244,7 +257,8 @@
                         subtitleY: this.subtitleY,
                         scaleFormat: this.scaleFormat,
                         decimalPlaces: this.decimalPlaces,
-                        topN: this.topN
+                        topN: this.topN,
+                        timeInterval: this.timeInterval
                     }
                 }
             }));
@@ -345,6 +359,14 @@
 
         set topN(value) {
             this._shadowRoot.getElementById('topN').value = value;
+        }
+
+        get timeInterval() {
+            return this._shadowRoot.getElementById('timeInterval').value;
+        }
+
+        set timeInterval(value) {
+            this._shadowRoot.getElementById('timeInterval').value = value;
         }
     }
     customElements.define('com-sap-sample-bar-race-aps', BarRaceAps);

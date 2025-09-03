@@ -194,7 +194,8 @@ import { scaleValue } from './formatting/scaleFormatter';
                 'chartTitle', 'titleSize', 'titleFontStyle', 'titleAlignment', 'titleColor',    // Title properties
                 'subtitleDateSize', 'subtitleTotalSize', 'subtitleX', 'subtitleY',              // Subtitle properties 
                 'scaleFormat', 'decimalPlaces',                                                 // Number formatting
-                'topN'                                                                          // Rank
+                'topN',                                                                         // Rank
+                'timeInterval'                                                                  // Bar race settings
             ];
         }
 
@@ -588,11 +589,13 @@ import { scaleValue } from './formatting/scaleFormatter';
 
                 chart.redraw();
 
+                const interval = parseInt(this.timeInterval, 10);
+
                 button.title = 'pause';
                 button.innerText = '⏸';
                 button.style.fontSize = '24px';
                 if (chart.sequenceTimer) clearInterval(chart.sequenceTimer);
-                chart.sequenceTimer = setInterval(() => doUpdate(1), 1000);
+                chart.sequenceTimer = setInterval(() => doUpdate(1), interval);
 
                 if (input) {
                     input.disabled = true;

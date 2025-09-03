@@ -91,6 +91,11 @@
             "type": "integer",
             "description": "The number of top items to display",
             "default": 10
+        },
+        "timeInterval": {
+            "type": "integer",
+            "description": "The time interval between frames in milliseconds",
+            "default": 1000
         }
     },
     "methods": {
