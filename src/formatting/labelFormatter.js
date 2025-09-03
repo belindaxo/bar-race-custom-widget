@@ -6,7 +6,7 @@ import * as Highcharts from 'highcharts';
  */
 export function formatDataLabels(scaleFormat) {
     return function () {
-        const rawValue = this.value;
+        const rawValue = this.y;
         const { scaledValue, valueSuffix } = scaleFormat(rawValue);
         const value = Highcharts.numberFormat(scaledValue, -1, '.', ',');
         return `${value}`;
