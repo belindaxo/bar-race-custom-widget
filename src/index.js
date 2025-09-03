@@ -393,6 +393,9 @@ import { scaleValue } from './formatting/scaleFormatter';
                             text: null
                         }
                     },
+                    tooltip: {
+                        outside: true
+                    },
                     plotOptions: {
                         series: {
                             animation: false,
