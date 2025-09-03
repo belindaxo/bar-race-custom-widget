@@ -4,8 +4,6 @@ import { processSeriesData } from './data/dataProcessor';
 import { applyHighchartsDefaults } from './config/highchartsSetup';
 import { createChartStylesheet } from './config/styles';
 import { updateTitle } from './config/chartUtils';
-import { formatDataLabels } from './formatting/labelFormatter';
-import { scaleValue } from './formatting/scaleFormatter';
 
 /* ---------- SAFETY PATCHES: HC teardown hardening (idempotent destroy + null-safe erase) ---------- */
 (function (H) {
@@ -340,7 +338,6 @@ import { scaleValue } from './formatting/scaleFormatter';
             };
 
             const currentLabel = () => timeline[this._currentIdx];
-            const scaleFormat = (value) => scaleValue(value, this.scaleFormat, parseInt(this.decimalPlaces) || 0);
 
             applyHighchartsDefaults();
 
@@ -409,6 +406,9 @@ import { scaleValue } from './formatting/scaleFormatter';
                                 enabled: true,
                                 style: {
                                     fontWeight: 'normal'
+                                },
+                                formatter: function () {
+                                    return Highcharts.numberFormat(this.y, 0);
                                 }
                             }
                         }
@@ -450,7 +450,7 @@ import { scaleValue } from './formatting/scaleFormatter';
                 s0.update({ name: String(currentLabel()) }, false, false);
 
                 // update subtitle last and redraw once
-                this._chart.update({ 
+                this._chart.update({
                     title: {
                         text: titleText,
                         align: this.titleAlignment || 'left',
@@ -460,13 +460,13 @@ import { scaleValue } from './formatting/scaleFormatter';
                             color: this.titleColor || '#004b8d'
                         }
                     },
-                    subtitle: { 
+                    subtitle: {
                         text: getSubtitle(currentLabel()),
                         y: this.subtitleY || 100,
                         x: this.subtitleX || -20
-                    } 
+                    }
                 }, false, false, false);
-                
+
                 this._chart.redraw();
             }
 
