@@ -1,4 +1,7 @@
 (function () {
+    /**
+     * Template for the Styling Panel (APS) of the Funnel3D widget.
+     */
     let template = document.createElement('template');
     template.innerHTML = `
         <form id="form">
@@ -160,7 +163,14 @@
         </form>
     `;
 
+    /**
+     * Custom Web Component for the Styling Panel (APS) of the widget.
+     * @extends HTMLElement
+     */
     class BarRaceAps extends HTMLElement {
+        /**
+         * Initializes the shadow DOM and sets up event listeners for form inputs.
+         */
         constructor() {
             super();
 
@@ -214,6 +224,10 @@
             });
         }
 
+        /**
+         * Handles the form submissions and dispatches a 'propertiesChanged' event.
+         * @param {Event} e - The form submission event.
+         */
         _submit(e) {
             e.preventDefault();
             this.dispatchEvent(new CustomEvent('propertiesChanged', {

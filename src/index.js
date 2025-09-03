@@ -7,7 +7,7 @@ import { updateTitle } from './config/chartUtils';
 import { formatDataLabels } from './formatting/labelFormatter';
 import { scaleValue } from './formatting/scaleFormatter';
 
-/* ---------- SAFETY PATCHES: HC teardown hardening (idempotent destroy + null-safe erase) ---------- */
+// SAFETY PATCHES: HC teardown hardening (idempotent destroy + null-safe erase) 
 (function (H) {
     const wrap = H.wrap;
 
@@ -32,9 +32,8 @@ import { scaleValue } from './formatting/scaleFormatter';
         });
     }
 })(Highcharts);
-/* -------------------------------------------------------------------------------------------------- */
 
-/* ----- EXTRA SAFETY PATCHES for HC 12.x: SVG teardown idempotent ----- */
+// EXTRA SAFETY PATCHES for HC 12.x: SVG teardown idempotent
 (function (H) {
     if (!H || !H.SVGElement) return;
     const wrap = H.wrap;
@@ -59,7 +58,8 @@ import { scaleValue } from './formatting/scaleFormatter';
         } catch { }
 
         try { proceed.apply(this, Array.prototype.slice.call(arguments, 1)); }
-        catch (e) { /* swallow second-pass SVG cleanup in SAC */ }
+        catch (e) { // swallow second-pass SVG cleanup in SAC
+        }
     });
 
     // Tooltip/pointer safety
@@ -76,10 +76,12 @@ import { scaleValue } from './formatting/scaleFormatter';
         });
     }
 })(Highcharts);
-/* --------------------------------------------------------------------- */
 
 (function () {
     class BarRace extends HTMLElement {
+        /**
+         * Initializes the shadow DOM, styles, and chart container.
+         */
         constructor() {
             super();
             this.attachShadow({ mode: 'open' });
@@ -134,6 +136,9 @@ import { scaleValue } from './formatting/scaleFormatter';
             this._scheduleRender();
         }
 
+        /**
+         * Called when the widget is destroyed. Cleans up chart instance.
+         */
         onCustomWidgetDestroy() {
             if (this._isDestroying) return;
             this._isDestroying = true;
@@ -171,6 +176,9 @@ import { scaleValue } from './formatting/scaleFormatter';
             this._isDestroying = false;
         }
 
+        /**
+         * Schedules a render of the chart.
+         */
         _scheduleRender() {
             if (this._dragging) return;
             clearTimeout(this._renderTimer);
@@ -190,6 +198,12 @@ import { scaleValue } from './formatting/scaleFormatter';
             ];
         }
 
+        /**
+         * Called when an observed attribute changes.
+         * @param {string} name - The name of the changed attribute.
+         * @param {string} oldValue - The old value of the attribute.
+         * @param {string} newValue - The new value of the attribute.
+         */
         attributeChangedCallback(name, oldValue, newValue) {
             if (oldValue !== newValue) {
                 this[name] = newValue;
