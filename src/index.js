@@ -6,6 +6,7 @@ import { createChartStylesheet } from './config/styles';
 import { updateTitle } from './config/chartUtils';
 import { formatDataLabels } from './formatting/labelFormatter';
 import { scaleValue } from './formatting/scaleFormatter';
+import { handlePointClick } from './interactions/eventHandlers';
 
 // SAFETY PATCHES: HC teardown hardening (idempotent destroy + null-safe erase) 
 (function (H) {
@@ -117,6 +118,9 @@ import { scaleValue } from './formatting/scaleFormatter';
 
             // timeline signature
             this._timelineSig = '';
+
+            // linked analysis
+            this._selectedPoint = null;
         }
 
         /**
@@ -174,6 +178,7 @@ import { scaleValue } from './formatting/scaleFormatter';
             try { this._chart && this._chart.destroy(); } catch { }
             this._chart = null;
             this._isDestroying = false;
+            this._selectedPoint = null;
         }
 
         /**
@@ -219,6 +224,7 @@ import { scaleValue } from './formatting/scaleFormatter';
             const dataBinding = this.dataBinding;
             if (!dataBinding || dataBinding.state !== 'success' || !dataBinding.data || dataBinding.data.length === 0) {
                 this._teardownChart();
+                this._selectedPoint = null;
                 return;
             }
             console.log('dataBinding:', dataBinding);
@@ -226,6 +232,7 @@ import { scaleValue } from './formatting/scaleFormatter';
             const { dimensions, measures } = parseMetadata(metadata);
             if (dimensions.length < 2 || measures.length < 1) {
                 this._teardownChart();
+                this._selectedPoint = null;
                 return;
             }
 
@@ -356,6 +363,7 @@ import { scaleValue } from './formatting/scaleFormatter';
 
             const currentLabel = () => timeline[this._currentIdx];
             const scaleFormat = (value) => scaleValue(value, this.scaleFormat, this.decimalPlaces);
+            const onPointClick = (event) => handlePointClick(event, dataBinding, dimensions, this);
 
             applyHighchartsDefaults();
 
@@ -429,7 +437,16 @@ import { scaleValue } from './formatting/scaleFormatter';
                                     fontWeight: 'normal'
                                 },
                                 formatter: formatDataLabels(scaleFormat)
+                            },
+                            allowPointSelect: true,
+                            cursor: 'pointer',
+                            point: {
+                                events: {
+                                    select: onPointClick,
+                                    unselect: onPointClick
+                                }
                             }
+                            
                         }
                     },
                     series: [{

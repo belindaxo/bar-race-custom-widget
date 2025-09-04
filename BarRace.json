@@ -7,6 +7,7 @@
     "id": "com.sap.sample.bar.race",
     "newInstancePrefix": "BarRace",
     "version": "1.0.0",
+    "supportsLinkedAnalysisFilterOnSelection": true,
     "webcomponents": [
         {
             "kind": "main",
