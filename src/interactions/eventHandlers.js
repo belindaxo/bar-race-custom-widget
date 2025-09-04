@@ -14,6 +14,7 @@ export function handlePointClick(event, dataBinding, dimensions, widget) {
     }
 
     const linkedAnalysis = widget.dataBindings.getDataBinding('dataBinding').getLinkedAnalysis();
+    console.log('Linked Analysis:', linkedAnalysis);
 
     const dimension = dimensions[0];
     const label = point.category;
@@ -36,6 +37,7 @@ export function handlePointClick(event, dataBinding, dimensions, widget) {
             const selection = {};
             selection[dimension.id] = row[dimension.key].id;
             linkedAnalysis.setFilters(selection);
+            console.log('Filter applied:', selection);
             widget._selectedPoint = point;
         }
     } else if (event.type === 'unselect') {
